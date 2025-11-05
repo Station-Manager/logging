@@ -23,7 +23,7 @@ type Service struct {
 	isInitialized atomic.Bool
 	initOnce      sync.Once
 	initErr       error
-	mu            sync.Mutex
+	//	mu            sync.Mutex
 }
 
 // Initialize initializes the logger.
@@ -165,18 +165,20 @@ func (s *Service) PanicWith() LogEvent {
 // Example: reqLogger := logger.With().Str("request_id", id).Logger()
 func (s *Service) With() LogContext {
 	if s == nil || !s.isInitialized.Load() {
-		// Return a context that will create a properly initialized logger later
-		return &logContext{
-			context: zerolog.New(nil).With(),
-			service: s,
-		}
+		//// Return a context that will create a properly initialized logger later
+		//return &logContext{
+		//	context: zerolog.New(nil).With(),
+		//	service: s,
+		//}
+		panic("logging.Service.With: service not initialized")
 	}
 	logger := s.logger.Load()
 	if logger == nil {
-		return &logContext{
-			context: zerolog.New(nil).With(),
-			service: s,
-		}
+		panic("logging.Service.With: logger not initialized")
+		//return &logContext{
+		//	context: zerolog.New(nil).With(),
+		//	service: s,
+		//}
 	}
 	return &logContext{
 		context: logger.With(),
