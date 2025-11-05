@@ -9,3 +9,44 @@ func getLevel(level string) (zerolog.Level, error) {
 	}
 	return l, nil
 }
+
+func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
+	if s == nil {
+		return newLogEvent(nil)
+	}
+	if !s.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	if level == zerolog.NoLevel {
+		return newLogEvent(nil)
+	}
+	logger := s.logger.Load()
+	if logger == nil {
+		return newLogEvent(nil)
+	}
+
+	if logger.GetLevel() > level {
+		return newLogEvent(nil) // Return early if level is not enabled
+	}
+
+	switch level {
+	case zerolog.DebugLevel:
+		return newLogEvent(logger.Debug())
+	case zerolog.InfoLevel:
+		return newLogEvent(logger.Info())
+	case zerolog.WarnLevel:
+		return newLogEvent(logger.Warn())
+	case zerolog.ErrorLevel:
+		return newLogEvent(logger.Error())
+	case zerolog.FatalLevel:
+		return newLogEvent(logger.Fatal())
+	case zerolog.PanicLevel:
+		return newLogEvent(logger.Panic())
+	//case zerolog.Disabled:
+	//	return newLogEvent(nil)
+	case zerolog.TraceLevel:
+		return newLogEvent(logger.Trace())
+	default:
+		return newLogEvent(nil)
+	}
+}

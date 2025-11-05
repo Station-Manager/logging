@@ -389,7 +389,7 @@ func (c *logContext) Logger() Logger {
 		WorkingDir:    c.service.WorkingDir,
 		AppConfig:     c.service.AppConfig,
 		LoggingConfig: c.service.LoggingConfig,
-		initialized:   c.service.initialized,
+		isInitialized: c.service.isInitialized,
 	}
 	newService.logger.Store(&logger)
 	return newService

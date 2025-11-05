@@ -1,7 +1,6 @@
 package logging
 
 import (
-	stderr "errors"
 	"github.com/Station-Manager/config"
 	"github.com/Station-Manager/errors"
 	"github.com/Station-Manager/types"
@@ -20,7 +19,9 @@ type Service struct {
 	AppConfig     *config.Service `di.inject:"appconfig"`
 	LoggingConfig *types.LoggingConfig
 	logger        atomic.Pointer[zerolog.Logger]
-	initialized   atomic.Bool
+	isInitialized atomic.Bool
+	initOnce      sync.Once
+	mu            sync.Mutex
 }
 
 // sprintPool is a buffer pool for legacy fmt.Sprint operations to reduce allocations
@@ -29,8 +30,6 @@ var sprintPool = sync.Pool{
 		return new(strings.Builder)
 	},
 }
-
-var initOnce sync.Once
 
 // Initialize initializes the logger.
 func (s *Service) Initialize() error {
@@ -45,11 +44,11 @@ func (s *Service) Initialize() error {
 
 	var err error
 
-	initOnce.Do(func() {
+	s.initOnce.Do(func() {
 		if s.WorkingDir == emptyString {
 			exeDir, pathErr := utils.AbsDirPathForExecutable()
 			if pathErr != nil {
-				err = stderr.Join(errors.New(op).Errorf("utils.AbsDirPathForExecutable: %w", pathErr))
+				err = errors.New(op).Errorf("utils.AbsDirPathForExecutable: %w", pathErr)
 				return
 			}
 			s.WorkingDir = filepath.Join(exeDir, "logs")
@@ -57,7 +56,7 @@ func (s *Service) Initialize() error {
 
 		loggingCfg, cfgErr := s.AppConfig.LoggingConfig()
 		if cfgErr != nil {
-			err = stderr.Join(errors.New(op).Errorf("s.AppConfig.LoggingConfig: %w", cfgErr))
+			err = errors.New(op).Errorf("s.AppConfig.LoggingConfig: %w", cfgErr)
 			return
 		}
 		s.LoggingConfig = &loggingCfg
@@ -69,20 +68,20 @@ func (s *Service) Initialize() error {
 		loggingDir := filepath.Join(s.WorkingDir, s.LoggingConfig.RelLogFileDir)
 		exists, existsErr := utils.PathExists(loggingDir)
 		if existsErr != nil {
-			err = stderr.Join(errors.New(op).Errorf("utils.PathExists: %w", existsErr))
+			err = errors.New(op).Errorf("utils.PathExists: %w", existsErr)
 			return
 		}
 
 		if !exists {
 			if mdErr := os.MkdirAll(loggingDir, os.ModePerm); mdErr != nil {
-				err = stderr.Join(errors.New(op).Errorf("os.MkdirAll: %w", mdErr))
+				err = errors.New(op).Errorf("os.MkdirAll: %w", mdErr)
 				return
 			}
 		}
 
 		exeName, exeErr := utils.ExecName(true)
 		if exeErr != nil {
-			err = stderr.Join(errors.New(op).Errorf("utils.ExecName: %w", exeErr))
+			err = errors.New(op).Errorf("utils.ExecName: %w", exeErr)
 			return
 		}
 
@@ -102,7 +101,7 @@ func (s *Service) Initialize() error {
 
 		level, levelErr := getLevel(s.LoggingConfig.Level)
 		if levelErr != nil {
-			err = stderr.Join(errors.New(op).Errorf("getLevel: %w", levelErr))
+			err = errors.New(op).Errorf("getLevel: %w", levelErr)
 			return
 		}
 		logger = logger.Level(level)
@@ -118,116 +117,54 @@ func (s *Service) Initialize() error {
 		// Store logger atomically
 		s.logger.Store(&logger)
 
-		s.initialized.Store(true)
+		s.isInitialized.Store(true)
 	})
 
 	return err
 }
 
-func (s *Service) Hook(hooks ...zerolog.Hook) {
-	if !s.initialized.Load() {
+func (s *Service) Close() {
+	if !s.isInitialized.Load() {
 		return
 	}
 
-	// Atomic compare-and-swap loop for thread-safe hook installation
-	for {
-		oldLogger := s.logger.Load()
-		if oldLogger == nil {
-			return
-		}
-
-		newLogger := oldLogger.Hook(hooks...)
-
-		// Try to swap - if another goroutine changed it, retry
-		if s.logger.CompareAndSwap(oldLogger, &newLogger) {
-			break
-		}
-	}
+	s.isInitialized.Store(false)
+	s.logger.Store(nil)
 }
-
-// Structured logging methods
 
 // InfoWith returns a LogEvent for structured Info-level logging.
 // Use this for queryable, structured logs instead of Info/Infof.
 // Example: logger.InfoWith().Str("user_id", id).Int("count", 5).Msg("User processed")
 func (s *Service) InfoWith() LogEvent {
-	if !s.initialized.Load() {
-		return newLogEvent(nil)
-	}
-	logger := s.logger.Load()
-	if logger == nil {
-		return newLogEvent(nil)
-	}
-	// Early return if info level is not enabled
-	if logger.GetLevel() > zerolog.InfoLevel {
-		return newLogEvent(nil)
-	}
-	return newLogEvent(logger.Info())
+	return logEventBuilder(s, zerolog.InfoLevel)
 }
 
 // WarnWith returns a LogEvent for structured Warn-level logging.
 func (s *Service) WarnWith() LogEvent {
-	if !s.initialized.Load() {
-		return newLogEvent(nil)
-	}
-	logger := s.logger.Load()
-	if logger == nil {
-		return newLogEvent(nil)
-	}
-	// Early return if warn level is not enabled
-	if logger.GetLevel() > zerolog.WarnLevel {
-		return newLogEvent(nil)
-	}
-	return newLogEvent(logger.Warn())
+	return logEventBuilder(s, zerolog.WarnLevel)
 }
 
 // ErrorWith returns a LogEvent for structured Error-level logging.
 // Example: logger.ErrorWith().Err(err).Str("operation", "database").Msg("Query failed")
 func (s *Service) ErrorWith() LogEvent {
-	if !s.initialized.Load() {
-		return newLogEvent(nil)
-	}
-	logger := s.logger.Load()
-	if logger == nil {
-		return newLogEvent(nil)
-	}
-	return newLogEvent(logger.Error())
+	return logEventBuilder(s, zerolog.ErrorLevel)
 }
 
 // DebugWith returns a LogEvent for structured Debug-level logging.
 func (s *Service) DebugWith() LogEvent {
-	if !s.initialized.Load() {
-		return newLogEvent(nil)
-	}
-	logger := s.logger.Load()
-	if logger == nil {
-		return newLogEvent(nil)
-	}
-	// Early return if debug level is not enabled
-	if logger.GetLevel() > zerolog.DebugLevel {
-		return newLogEvent(nil)
-	}
-	return newLogEvent(logger.Debug())
+	return logEventBuilder(s, zerolog.DebugLevel)
 }
 
 // FatalWith returns a LogEvent for structured Fatal-level logging.
 // The program will exit after the log is written.
 func (s *Service) FatalWith() LogEvent {
-	if !s.initialized.Load() {
-		// For fatal, we still need to exit even if not initialized
-		return newLogEvent(nil)
-	}
-	logger := s.logger.Load()
-	if logger == nil {
-		return newLogEvent(nil)
-	}
-	return newLogEvent(logger.Fatal())
+	return logEventBuilder(s, zerolog.FatalLevel)
 }
 
 // With returns a LogContext for creating a child logger with pre-populated fields.
 // Example: reqLogger := logger.With().Str("request_id", id).Logger()
 func (s *Service) With() LogContext {
-	if !s.initialized.Load() {
+	if s == nil || !s.isInitialized.Load() {
 		// Return a context that will create a properly initialized logger later
 		return &logContext{
 			context: zerolog.New(nil).With(),
