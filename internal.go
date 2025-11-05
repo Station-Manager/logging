@@ -32,7 +32,7 @@ func (s *Service) initializeWriters(logfile string) []io.Writer {
 	}
 	if s.LoggingConfig.FileLogging {
 		s.fileWriter = s.initializeRollingFileLogger(logfile)
-		writers = append(writers, s.initializeRollingFileLogger(logfile))
+		writers = append(writers, s.fileWriter)
 	}
 	if s.LoggingConfig.ConsoleLogging {
 		writers = append(writers, zerolog.ConsoleWriter{Out: os.Stderr})

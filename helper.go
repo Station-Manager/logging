@@ -11,10 +11,7 @@ func getLevel(level string) (zerolog.Level, error) {
 }
 
 func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
-	if s == nil {
-		return newLogEvent(nil)
-	}
-	if !s.isInitialized.Load() {
+	if s == nil || !s.isInitialized.Load() {
 		return newLogEvent(nil)
 	}
 	if level == zerolog.NoLevel {

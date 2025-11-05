@@ -343,19 +343,15 @@ func (c *logContext) Interface(key string, val interface{}) LogContext {
 	return c
 }
 
-//	func (c *logContext) Logger() Logger {
-//		logger := c.context.Logger()
-//		newService := &Service{
-//			WorkingDir:    c.service.WorkingDir,
-//			AppConfig:     c.service.AppConfig,
-//			LoggingConfig: c.service.LoggingConfig,
-//			isInitialized: c.service.isInitialized,
-//		}
-//		newService.logger.Store(&logger)
-//		return newService
-//	}
 func (c *logContext) Logger() Logger {
 	logger := c.context.Logger()
-	c.service.logger.Store(&logger)
-	return c.service
+	newService := &Service{
+		WorkingDir:    c.service.WorkingDir,
+		AppConfig:     c.service.AppConfig,
+		LoggingConfig: c.service.LoggingConfig,
+		fileWriter:    c.service.fileWriter,
+	}
+	newService.logger.Store(&logger)
+	newService.isInitialized.Store(true)
+	return newService
 }

@@ -13,10 +13,7 @@ import (
 // For complex types like maps and slices, it logs their elements.
 // For basic types, it logs their values.
 func (s *Service) Dump(v interface{}) {
-	if s == nil {
-		return
-	}
-	if !s.isInitialized.Load() {
+	if s == nil || !s.isInitialized.Load() {
 		return
 	}
 	logger := s.logger.Load()

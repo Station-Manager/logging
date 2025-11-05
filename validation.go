@@ -11,7 +11,7 @@ var validate *validator.Validate
 var once sync.Once
 
 func validateConfig(cfg *types.LoggingConfig) error {
-	const op errors.Op = "database.validateConfig"
+	const op errors.Op = "logging.validateConfig"
 	if cfg == nil {
 		return errors.New(op).Msg(errMsgNilConfig)
 	}
