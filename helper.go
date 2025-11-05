@@ -2,7 +2,7 @@ package logging
 
 import "github.com/rs/zerolog"
 
-func getLevel(level string) (zerolog.Level, error) {
+func parseLevel(level string) (zerolog.Level, error) {
 	l, err := zerolog.ParseLevel(level)
 	if err != nil {
 		return zerolog.NoLevel, err
@@ -23,6 +23,7 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 
 	// Increment active operations counter before acquiring lock
 	s.activeOps.Add(1)
+	s.wg.Add(1)
 
 	// Acquire read lock to prevent Close() from running during log creation
 	s.mu.RLock()
@@ -31,6 +32,7 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 	if !s.isInitialized.Load() {
 		s.mu.RUnlock()
 		s.activeOps.Add(-1)
+		s.wg.Done()
 		return newLogEvent(nil)
 	}
 
@@ -38,12 +40,14 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 	if logger == nil {
 		s.mu.RUnlock()
 		s.activeOps.Add(-1)
+		s.wg.Done()
 		return newLogEvent(nil)
 	}
 
 	if logger.GetLevel() > level {
 		s.mu.RUnlock()
 		s.activeOps.Add(-1)
+		s.wg.Done()
 		return newLogEvent(nil) // Return early if level is not enabled
 	}
 
@@ -66,6 +70,7 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 	default:
 		s.mu.RUnlock()
 		s.activeOps.Add(-1)
+		s.wg.Done()
 		return newLogEvent(nil)
 	}
 

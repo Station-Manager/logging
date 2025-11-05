@@ -32,17 +32,6 @@ func validateConfig(cfg *types.LoggingConfig) error {
 		return errors.New(op).Errorf("invalid log level '%s': %w", cfg.Level, err)
 	}
 
-	// Validate numeric limits
-	if cfg.LogFileMaxBackups < 0 {
-		return errors.New(op).Msg("LogFileMaxBackups must be >= 0")
-	}
-	if cfg.LogFileMaxAgeDays < 0 {
-		return errors.New(op).Msg("LogFileMaxAgeDays must be >= 0")
-	}
-	if cfg.LogFileMaxSizeMB < 1 {
-		return errors.New(op).Msg("LogFileMaxSizeMB must be >= 1")
-	}
-
 	// Validate skip frame count is reasonable
 	if cfg.SkipFrameCount < 0 || cfg.SkipFrameCount > 20 {
 		return errors.New(op).Msg("SkipFrameCount must be between 0 and 20")

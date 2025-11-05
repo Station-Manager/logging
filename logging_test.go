@@ -30,11 +30,13 @@ func validLoggingConfig() *types.LoggingConfig {
 
 // Helper to create a config service with logging config
 func newTestConfigService(cfg *types.LoggingConfig) *config.Service {
-	return &config.Service{
+	svc := &config.Service{
 		AppConfig: types.AppConfig{
 			LoggingConfig: *cfg,
 		},
 	}
+	_ = svc.Initialize()
+	return svc
 }
 
 func TestService_Initialize(t *testing.T) {
@@ -617,7 +619,7 @@ func TestGetLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			level, err := getLevel(tt.level)
+			level, err := parseLevel(tt.level)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

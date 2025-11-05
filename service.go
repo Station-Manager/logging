@@ -26,6 +26,7 @@ type Service struct {
 	initErr       error
 	mu            sync.RWMutex
 	activeOps     atomic.Int32 // Track active logging operations
+	wg            sync.WaitGroup
 }
 
 // Initialize initializes the logger.
@@ -84,9 +85,9 @@ func (s *Service) Initialize() error {
 		mw := io.MultiWriter(s.initializeWriters(exeName)...)
 		logger := zerolog.New(mw).With().Logger()
 
-		level, levelErr := getLevel(s.LoggingConfig.Level)
+		level, levelErr := parseLevel(s.LoggingConfig.Level)
 		if levelErr != nil {
-			s.initErr = errors.New(op).Errorf("getLevel: %w", levelErr)
+			s.initErr = errors.New(op).Errorf("parseLevel: %w", levelErr)
 			return
 		}
 		logger = logger.Level(level)
@@ -144,18 +145,22 @@ func (s *Service) Close() error {
 		warnOnTimeout = s.LoggingConfig.ShutdownTimeoutWarning
 	}
 
-	// Wait for active logging operations to complete
-	// Poll with small delays to allow operations to finish
-	iterations := timeoutMS
+	// Wait for active logging operations to complete using WaitGroup with timeout
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+
+	timer := time.NewTimer(time.Duration(timeoutMS) * time.Millisecond)
+	defer timer.Stop()
+
 	timedOut := false
-	for i := 0; i < iterations; i++ {
-		if s.activeOps.Load() == 0 {
-			break
-		}
-		time.Sleep(time.Millisecond)
-		if i == iterations-1 {
-			timedOut = true
-		}
+	select {
+	case <-done:
+		// all operations finished
+	case <-timer.C:
+		timedOut = true
 	}
 
 	// Log warning if shutdown timeout was exceeded and warning is enabled

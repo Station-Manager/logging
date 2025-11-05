@@ -19,7 +19,11 @@ func (s *Service) Dump(v interface{}) {
 
 	// Increment active operations counter
 	s.activeOps.Add(1)
-	defer s.activeOps.Add(-1)
+	s.wg.Add(1)
+	defer func() {
+		s.activeOps.Add(-1)
+		s.wg.Done()
+	}()
 
 	// Acquire read lock to prevent Close() from running
 	s.mu.RLock()
@@ -68,27 +72,49 @@ func (s *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string
 
 	val := reflect.ValueOf(v)
 
-	// Handle pointers to prevent infinite recursion
-	if val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface {
-		if val.IsNil() {
-			logger.Debug().Msgf("%s: <nil>", prefix)
-			return
-		}
-
-		// Check for circular references
-		ptr := val.Pointer()
-		if visited[ptr] {
-			logger.Debug().Msgf("%s: <circular reference>", prefix)
-			return
-		}
-		visited[ptr] = true
-
-		if val.Kind() == reflect.Ptr {
+	// Safely unwrap interfaces and handle pointers, with cycle detection.
+	// Avoid calling Pointer() on unsupported kinds.
+	for {
+		switch val.Kind() {
+		case reflect.Interface:
+			if val.IsNil() {
+				logger.Debug().Msgf("%s: <nil>", prefix)
+				return
+			}
 			val = val.Elem()
+			// continue unwrapping
+			continue
+		case reflect.Ptr:
+			if val.IsNil() {
+				logger.Debug().Msgf("%s: <nil>", prefix)
+				return
+			}
+			ptr := val.Pointer()
+			if visited[ptr] {
+				logger.Debug().Msgf("%s: <circular reference>", prefix)
+				return
+			}
+			visited[ptr] = true
+			val = val.Elem()
+			// pointer unwrapped; continue handling concrete kind
 		}
+		break
 	}
 
 	typ := val.Type()
+
+	// For non-pointer addressable values (like structs that are reachable multiple
+	// times by reference), record their address to help detect cycles.
+	if val.CanAddr() {
+		addrPtr := val.Addr().Pointer()
+		if visited[addrPtr] {
+			logger.Debug().Msgf("%s: <circular reference>", prefix)
+			return
+		}
+		// mark addressable value as visited so repeated references won't recurse endlessly
+		visited[addrPtr] = true
+		// Note: keep this entry; it's fine for the scope of this dump call
+	}
 
 	switch val.Kind() {
 	case reflect.Struct:
@@ -128,12 +154,12 @@ func (s *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string
 		iter := val.MapRange()
 		for iter.Next() {
 			k := iter.Key()
-			v := iter.Value()
+			vv := iter.Value()
 
 			keyStr := fmt.Sprintf("%v", k.Interface())
 			mapPrefix := prefix + "[" + keyStr + "]"
 
-			s.dumpValue(logger, v.Interface(), mapPrefix, visited, depth+1)
+			s.dumpValue(logger, vv.Interface(), mapPrefix, visited, depth+1)
 		}
 
 		logger.Debug().Msgf("%s: }", prefix)
@@ -146,7 +172,14 @@ func (s *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string
 		maxElements := 10
 		for i := 0; i < val.Len() && i < maxElements; i++ {
 			elemPrefix := fmt.Sprintf("%s[%d]", prefix, i)
-			s.dumpValue(logger, val.Index(i).Interface(), elemPrefix, visited, depth+1)
+			elem := val.Index(i)
+			// If the element is addressable/pointer, pass its Interface
+			if elem.CanInterface() {
+				s.dumpValue(logger, elem.Interface(), elemPrefix, visited, depth+1)
+			} else {
+				// fallback for unexported/unaligned values
+				s.dumpValue(logger, reflect.New(elem.Type()).Elem().Interface(), elemPrefix, visited, depth+1)
+			}
 		}
 
 		if val.Len() > maxElements {
@@ -156,7 +189,11 @@ func (s *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string
 		logger.Debug().Msgf("%s: }", prefix)
 
 	default:
-		// For basic types, just log the value
-		logger.Debug().Msgf("%s: %v", prefix, v)
+		// For basic types, log the current reflect.Value's interface
+		if val.IsValid() && val.CanInterface() {
+			logger.Debug().Msgf("%s: %v", prefix, val.Interface())
+		} else {
+			logger.Debug().Msgf("%s: %v", prefix, v)
+		}
 	}
 }

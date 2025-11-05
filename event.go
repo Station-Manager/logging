@@ -97,6 +97,7 @@ func newTrackedContextLogEvent(cl *contextLogger, level zerolog.Level) LogEvent 
 
 	// Increment active operations counter
 	cl.parent.activeOps.Add(1)
+	cl.parent.wg.Add(1)
 
 	// Acquire read lock to prevent Close() from running
 	cl.parent.mu.RLock()
@@ -105,12 +106,14 @@ func newTrackedContextLogEvent(cl *contextLogger, level zerolog.Level) LogEvent 
 	if !cl.parent.isInitialized.Load() {
 		cl.parent.mu.RUnlock()
 		cl.parent.activeOps.Add(-1)
+		cl.parent.wg.Done()
 		return newLogEvent(nil)
 	}
 
 	if cl.logger.GetLevel() > level {
 		cl.parent.mu.RUnlock()
 		cl.parent.activeOps.Add(-1)
+		cl.parent.wg.Done()
 		return newLogEvent(nil)
 	}
 
@@ -133,6 +136,7 @@ func newTrackedContextLogEvent(cl *contextLogger, level zerolog.Level) LogEvent 
 	default:
 		cl.parent.mu.RUnlock()
 		cl.parent.activeOps.Add(-1)
+		cl.parent.wg.Done()
 		return newLogEvent(nil)
 	}
 
@@ -353,21 +357,30 @@ func (e *logEvent) Send() {
 
 // Override Msg, Msgf, and Send for trackedLogEvent to decrement counter
 func (e *trackedLogEvent) Msg(msg string) {
-	defer e.service.activeOps.Add(-1)
+	defer func() {
+		e.service.activeOps.Add(-1)
+		e.service.wg.Done()
+	}()
 	if e.event != nil {
 		e.event.Msg(msg)
 	}
 }
 
 func (e *trackedLogEvent) Msgf(format string, v ...interface{}) {
-	defer e.service.activeOps.Add(-1)
+	defer func() {
+		e.service.activeOps.Add(-1)
+		e.service.wg.Done()
+	}()
 	if e.event != nil {
 		e.event.Msgf(format, v...)
 	}
 }
 
 func (e *trackedLogEvent) Send() {
-	defer e.service.activeOps.Add(-1)
+	defer func() {
+		e.service.activeOps.Add(-1)
+		e.service.wg.Done()
+	}()
 	if e.event != nil {
 		e.event.Send()
 	}

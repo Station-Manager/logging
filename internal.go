@@ -20,6 +20,7 @@ func (s *Service) initializeRollingFileLogger(exeName string) *lumberjack.Logger
 		MaxBackups: s.LoggingConfig.LogFileMaxBackups,
 		MaxAge:     s.LoggingConfig.LogFileMaxAgeDays,
 		MaxSize:    s.LoggingConfig.LogFileMaxSizeMB,
+		Compress:   s.LoggingConfig.LogFileCompress,
 	}
 }
 
@@ -39,7 +40,14 @@ func (s *Service) initializeWriters(logfile string) []io.Writer {
 		writers = append(writers, s.fileWriter)
 	}
 	if consoleLogging {
-		writers = append(writers, zerolog.ConsoleWriter{Out: os.Stderr})
+		cw := zerolog.ConsoleWriter{Out: os.Stderr}
+		if s.LoggingConfig.ConsoleNoColor {
+			cw.NoColor = true
+		}
+		if s.LoggingConfig.ConsoleTimeFormat != "" {
+			cw.TimeFormat = s.LoggingConfig.ConsoleTimeFormat
+		}
+		writers = append(writers, cw)
 	}
 
 	return writers
