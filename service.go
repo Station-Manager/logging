@@ -22,6 +22,7 @@ type Service struct {
 	logger        atomic.Pointer[zerolog.Logger]
 	isInitialized atomic.Bool
 	initOnce      sync.Once
+	initErr       error
 	mu            sync.Mutex
 }
 
@@ -36,46 +37,45 @@ func (s *Service) Initialize() error {
 		return errors.New(op).Msg(errMsgAppCfgNotSet)
 	}
 
-	var err error
-
 	s.initOnce.Do(func() {
+		loggingCfg, cfgErr := s.AppConfig.LoggingConfig()
+		if cfgErr != nil {
+			s.initErr = errors.New(op).Errorf("s.AppConfig.LoggingConfig: %w", cfgErr)
+			return
+		}
+
+		if cfgErr = validateConfig(&loggingCfg); cfgErr != nil {
+			s.initErr = errors.New(op).Errorf("validateConfig: %w", cfgErr)
+			return
+		}
+		s.LoggingConfig = &loggingCfg
+
 		if s.WorkingDir == emptyString {
 			exeDir, pathErr := utils.AbsDirPathForExecutable()
 			if pathErr != nil {
-				err = errors.New(op).Errorf("utils.AbsDirPathForExecutable: %w", pathErr)
+				s.initErr = errors.New(op).Errorf("utils.AbsDirPathForExecutable: %w", pathErr)
 				return
 			}
 			s.WorkingDir = exeDir
 		}
 
-		loggingCfg, cfgErr := s.AppConfig.LoggingConfig()
-		if cfgErr != nil {
-			err = errors.New(op).Errorf("s.AppConfig.LoggingConfig: %w", cfgErr)
-			return
-		}
-
-		if cfgErr = validateConfig(&loggingCfg); cfgErr != nil {
-			err = errors.New(op).Errorf("validateConfig: %w", cfgErr)
-		}
-		s.LoggingConfig = &loggingCfg
-
 		loggingDir := filepath.Join(s.WorkingDir, s.LoggingConfig.RelLogFileDir)
 		exists, existsErr := utils.PathExists(loggingDir)
 		if existsErr != nil {
-			err = errors.New(op).Errorf("utils.PathExists: %w", existsErr)
+			s.initErr = errors.New(op).Errorf("utils.PathExists: %w", existsErr)
 			return
 		}
 
 		if !exists {
 			if mdErr := os.MkdirAll(loggingDir, 0755); mdErr != nil {
-				err = errors.New(op).Errorf("os.MkdirAll: %w", mdErr)
+				s.initErr = errors.New(op).Errorf("os.MkdirAll: %w", mdErr)
 				return
 			}
 		}
 
 		exeName, exeErr := utils.ExecName(true)
 		if exeErr != nil {
-			err = errors.New(op).Errorf("utils.ExecName: %w", exeErr)
+			s.initErr = errors.New(op).Errorf("utils.ExecName: %w", exeErr)
 			return
 		}
 
@@ -84,7 +84,7 @@ func (s *Service) Initialize() error {
 
 		level, levelErr := getLevel(s.LoggingConfig.Level)
 		if levelErr != nil {
-			err = errors.New(op).Errorf("getLevel: %w", levelErr)
+			s.initErr = errors.New(op).Errorf("getLevel: %w", levelErr)
 			return
 		}
 		logger = logger.Level(level)
@@ -103,7 +103,7 @@ func (s *Service) Initialize() error {
 		s.isInitialized.Store(true)
 	})
 
-	return err
+	return s.initErr
 }
 
 func (s *Service) Close() error {
