@@ -89,6 +89,58 @@ func newTrackedLogEvent(e *zerolog.Event, s *Service) LogEvent {
 	}
 }
 
+// newTrackedContextLogEvent creates a tracked log event for context loggers
+func newTrackedContextLogEvent(cl *contextLogger, level zerolog.Level) LogEvent {
+	if cl == nil || cl.logger == nil || cl.parent == nil {
+		return newLogEvent(nil)
+	}
+
+	// Increment active operations counter
+	cl.parent.activeOps.Add(1)
+
+	// Acquire read lock to prevent Close() from running
+	cl.parent.mu.RLock()
+
+	// Double-check after acquiring lock
+	if !cl.parent.isInitialized.Load() {
+		cl.parent.mu.RUnlock()
+		cl.parent.activeOps.Add(-1)
+		return newLogEvent(nil)
+	}
+
+	if cl.logger.GetLevel() > level {
+		cl.parent.mu.RUnlock()
+		cl.parent.activeOps.Add(-1)
+		return newLogEvent(nil)
+	}
+
+	var event *zerolog.Event
+	switch level {
+	case zerolog.DebugLevel:
+		event = cl.logger.Debug()
+	case zerolog.InfoLevel:
+		event = cl.logger.Info()
+	case zerolog.WarnLevel:
+		event = cl.logger.Warn()
+	case zerolog.ErrorLevel:
+		event = cl.logger.Error()
+	case zerolog.FatalLevel:
+		event = cl.logger.Fatal()
+	case zerolog.PanicLevel:
+		event = cl.logger.Panic()
+	case zerolog.TraceLevel:
+		event = cl.logger.Trace()
+	default:
+		cl.parent.mu.RUnlock()
+		cl.parent.activeOps.Add(-1)
+		return newLogEvent(nil)
+	}
+
+	cl.parent.mu.RUnlock()
+
+	return newTrackedLogEvent(event, cl.parent)
+}
+
 func (e *logEvent) Str(key, val string) LogEvent {
 	if e.event != nil {
 		e.event.Str(key, val)
@@ -335,46 +387,53 @@ type contextLogger struct {
 	parent *Service
 }
 
-func (cl *contextLogger) InfoWith() LogEvent {
+func (cl *contextLogger) TraceWith() LogEvent {
 	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
 		return newLogEvent(nil)
 	}
-	return newLogEvent(cl.logger.Info())
-}
-
-func (cl *contextLogger) WarnWith() LogEvent {
-	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
-		return newLogEvent(nil)
-	}
-	return newLogEvent(cl.logger.Warn())
-}
-
-func (cl *contextLogger) ErrorWith() LogEvent {
-	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
-		return newLogEvent(nil)
-	}
-	return newLogEvent(cl.logger.Error())
+	return newTrackedContextLogEvent(cl, zerolog.TraceLevel)
 }
 
 func (cl *contextLogger) DebugWith() LogEvent {
 	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
 		return newLogEvent(nil)
 	}
-	return newLogEvent(cl.logger.Debug())
+	return newTrackedContextLogEvent(cl, zerolog.DebugLevel)
+}
+
+func (cl *contextLogger) InfoWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newTrackedContextLogEvent(cl, zerolog.InfoLevel)
+}
+
+func (cl *contextLogger) WarnWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newTrackedContextLogEvent(cl, zerolog.WarnLevel)
+}
+
+func (cl *contextLogger) ErrorWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newTrackedContextLogEvent(cl, zerolog.ErrorLevel)
 }
 
 func (cl *contextLogger) FatalWith() LogEvent {
 	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
 		return newLogEvent(nil)
 	}
-	return newLogEvent(cl.logger.Fatal())
+	return newTrackedContextLogEvent(cl, zerolog.FatalLevel)
 }
 
 func (cl *contextLogger) PanicWith() LogEvent {
 	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
 		return newLogEvent(nil)
 	}
-	return newLogEvent(cl.logger.Panic())
+	return newTrackedContextLogEvent(cl, zerolog.PanicLevel)
 }
 
 func (cl *contextLogger) With() LogContext {
@@ -484,10 +543,11 @@ func (n *noopLogContext) Logger() Logger { return &noopLogger{} }
 // noopLogger is a no-op implementation of Logger
 type noopLogger struct{}
 
+func (n *noopLogger) TraceWith() LogEvent { return newLogEvent(nil) }
+func (n *noopLogger) DebugWith() LogEvent { return newLogEvent(nil) }
 func (n *noopLogger) InfoWith() LogEvent  { return newLogEvent(nil) }
 func (n *noopLogger) WarnWith() LogEvent  { return newLogEvent(nil) }
 func (n *noopLogger) ErrorWith() LogEvent { return newLogEvent(nil) }
-func (n *noopLogger) DebugWith() LogEvent { return newLogEvent(nil) }
 func (n *noopLogger) FatalWith() LogEvent { return newLogEvent(nil) }
 func (n *noopLogger) PanicWith() LogEvent { return newLogEvent(nil) }
 func (n *noopLogger) With() LogContext    { return &noopLogContext{} }

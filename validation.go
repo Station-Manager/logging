@@ -4,6 +4,9 @@ import (
 	"github.com/Station-Manager/errors"
 	"github.com/Station-Manager/types"
 	"github.com/go-playground/validator/v10"
+	"github.com/rs/zerolog"
+	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -22,6 +25,43 @@ func validateConfig(cfg *types.LoggingConfig) error {
 
 	if err := validate.Struct(cfg); err != nil {
 		return errors.New(op).Err(err).Msg(errMsgConfigInvalid)
+	}
+
+	// Validate log level
+	if _, err := zerolog.ParseLevel(cfg.Level); err != nil {
+		return errors.New(op).Errorf("invalid log level '%s': %w", cfg.Level, err)
+	}
+
+	// Validate numeric limits
+	if cfg.LogFileMaxBackups < 0 {
+		return errors.New(op).Msg("LogFileMaxBackups must be >= 0")
+	}
+	if cfg.LogFileMaxAgeDays < 0 {
+		return errors.New(op).Msg("LogFileMaxAgeDays must be >= 0")
+	}
+	if cfg.LogFileMaxSizeMB < 1 {
+		return errors.New(op).Msg("LogFileMaxSizeMB must be >= 1")
+	}
+
+	// Validate skip frame count is reasonable
+	if cfg.SkipFrameCount < 0 || cfg.SkipFrameCount > 20 {
+		return errors.New(op).Msg("SkipFrameCount must be between 0 and 20")
+	}
+
+	// Validate RelLogFileDir for path traversal
+	if cfg.RelLogFileDir == "" {
+		return errors.New(op).Msg("RelLogFileDir cannot be empty")
+	}
+
+	// Clean the path and check for directory traversal attempts
+	cleanPath := filepath.Clean(cfg.RelLogFileDir)
+	if strings.Contains(cleanPath, "..") {
+		return errors.New(op).Msg("RelLogFileDir cannot contain '..' (directory traversal)")
+	}
+
+	// Ensure it's a relative path (doesn't start with / or drive letter on Windows)
+	if filepath.IsAbs(cleanPath) {
+		return errors.New(op).Msg("RelLogFileDir must be a relative path")
 	}
 
 	return nil

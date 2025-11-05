@@ -4,10 +4,11 @@ package logging
 // For new code, prefer the structured logging methods (InfoWith, ErrorWith, etc.) over
 // the traditional methods (Info, Infof, etc.) for better queryability and observability.
 type Logger interface {
+	TraceWith() LogEvent
+	DebugWith() LogEvent
 	InfoWith() LogEvent
 	WarnWith() LogEvent
 	ErrorWith() LogEvent
-	DebugWith() LogEvent
 	FatalWith() LogEvent
 	PanicWith() LogEvent
 

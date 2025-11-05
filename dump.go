@@ -42,9 +42,9 @@ func (s *Service) Dump(v interface{}) {
 		return
 	}
 
-	// We can release the read lock here since we've captured the logger
-	// and we'll use activeOps to prevent Close() from completing
-	s.mu.RUnlock()
+	// Hold the read lock for the entire operation to prevent Close() from
+	// deallocating resources while dumpValue is executing
+	defer s.mu.RUnlock()
 
 	// Use a map to track visited pointers to prevent infinite recursion
 	visited := make(map[uintptr]bool)

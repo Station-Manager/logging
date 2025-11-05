@@ -69,7 +69,7 @@ func (s *Service) Initialize() error {
 		}
 
 		if !exists {
-			if mdErr := os.MkdirAll(loggingDir, 0755); mdErr != nil {
+			if mdErr := os.MkdirAll(loggingDir, 0750); mdErr != nil {
 				s.initErr = errors.New(op).Errorf("os.MkdirAll: %w", mdErr)
 				return
 			}
@@ -126,18 +126,45 @@ func (s *Service) Close() error {
 		return nil
 	}
 
+	// Capture logger for potential warning before marking uninitialized
+	logger := s.logger.Load()
+
 	// Mark as uninitialized first to prevent new operations
 	s.isInitialized.Store(false)
 	s.logger.Store(nil)
 	s.mu.Unlock()
 
+	// Determine timeout (default 100ms if not configured)
+	timeoutMS := 100
+	warnOnTimeout := false
+	if s.LoggingConfig != nil {
+		if s.LoggingConfig.ShutdownTimeoutMS > 0 {
+			timeoutMS = s.LoggingConfig.ShutdownTimeoutMS
+		}
+		warnOnTimeout = s.LoggingConfig.ShutdownTimeoutWarning
+	}
+
 	// Wait for active logging operations to complete
 	// Poll with small delays to allow operations to finish
-	for i := 0; i < 100; i++ {
+	iterations := timeoutMS
+	timedOut := false
+	for i := 0; i < iterations; i++ {
 		if s.activeOps.Load() == 0 {
 			break
 		}
 		time.Sleep(time.Millisecond)
+		if i == iterations-1 {
+			timedOut = true
+		}
+	}
+
+	// Log warning if shutdown timeout was exceeded and warning is enabled
+	if timedOut && warnOnTimeout && logger != nil {
+		activeOps := s.activeOps.Load()
+		logger.Warn().
+			Int32("active_operations", activeOps).
+			Int("timeout_ms", timeoutMS).
+			Msg("Logger shutdown timeout exceeded, forcing close with active operations")
 	}
 
 	// Close the file writer if it exists
@@ -155,6 +182,17 @@ func (s *Service) Close() error {
 	}
 
 	return nil
+}
+
+// TraceWith returns a LogEvent for structured Trace-level logging.
+// Trace is the most verbose logging level, typically used for very detailed debugging.
+func (s *Service) TraceWith() LogEvent {
+	return logEventBuilder(s, zerolog.TraceLevel)
+}
+
+// DebugWith returns a LogEvent for structured Debug-level logging.
+func (s *Service) DebugWith() LogEvent {
+	return logEventBuilder(s, zerolog.DebugLevel)
 }
 
 // InfoWith returns a LogEvent for structured Info-level logging.
@@ -175,17 +213,14 @@ func (s *Service) ErrorWith() LogEvent {
 	return logEventBuilder(s, zerolog.ErrorLevel)
 }
 
-// DebugWith returns a LogEvent for structured Debug-level logging.
-func (s *Service) DebugWith() LogEvent {
-	return logEventBuilder(s, zerolog.DebugLevel)
-}
-
 // FatalWith returns a LogEvent for structured Fatal-level logging.
 // The program will exit after the log is written.
 func (s *Service) FatalWith() LogEvent {
 	return logEventBuilder(s, zerolog.FatalLevel)
 }
 
+// PanicWith returns a LogEvent for structured Panic-level logging.
+// The program will panic after the log is written.
 func (s *Service) PanicWith() LogEvent {
 	return logEventBuilder(s, zerolog.PanicLevel)
 }
