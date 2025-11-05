@@ -31,6 +31,7 @@ func (s *Service) initializeWriters(logfile string) []io.Writer {
 		s.LoggingConfig.FileLogging = true
 	}
 	if s.LoggingConfig.FileLogging {
+		s.fileWriter = s.initializeRollingFileLogger(logfile)
 		writers = append(writers, s.initializeRollingFileLogger(logfile))
 	}
 	if s.LoggingConfig.ConsoleLogging {

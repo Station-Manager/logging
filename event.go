@@ -9,29 +9,17 @@ import (
 // LogContext provides a fluent interface for building a context logger with pre-populated fields.
 // Fields added through LogContext will be included in all subsequent log messages.
 type LogContext interface {
-	// String fields
 	Str(key, val string) LogContext
 	Strs(key string, vals []string) LogContext
-
-	// Numeric fields
 	Int(key string, val int) LogContext
 	Int64(key string, val int64) LogContext
 	Uint(key string, val uint) LogContext
 	Uint64(key string, val uint64) LogContext
 	Float64(key string, val float64) LogContext
-
-	// Boolean fields
 	Bool(key string, val bool) LogContext
-
-	// Time fields
 	Time(key string, val time.Time) LogContext
-
-	// Error fields
 	Err(err error) LogContext
-
-	// Generic interface
 	Interface(key string, val interface{}) LogContext
-
 	// Logger creates and returns the new context logger
 	Logger() Logger
 }
@@ -39,12 +27,9 @@ type LogContext interface {
 // LogEvent provides a fluent interface for structured logging with type-safe field methods.
 // It wraps zerolog.Event to provide a clean API for adding typed fields to log entries.
 type LogEvent interface {
-	// String fields
 	Str(key, val string) LogEvent
 	Strs(key string, vals []string) LogEvent
 	Stringer(key string, val interface{ String() string }) LogEvent
-
-	// Numeric fields
 	Int(key string, val int) LogEvent
 	Int8(key string, val int8) LogEvent
 	Int16(key string, val int16) LogEvent
@@ -57,34 +42,18 @@ type LogEvent interface {
 	Uint64(key string, val uint64) LogEvent
 	Float32(key string, val float32) LogEvent
 	Float64(key string, val float64) LogEvent
-
-	// Boolean fields
 	Bool(key string, val bool) LogEvent
 	Bools(key string, vals []bool) LogEvent
-
-	// Time and duration fields
 	Time(key string, val time.Time) LogEvent
 	Dur(key string, val time.Duration) LogEvent
-
-	// Error fields
 	Err(err error) LogEvent
 	AnErr(key string, err error) LogEvent
-
-	// Binary and bytes
 	Bytes(key string, val []byte) LogEvent
 	Hex(key string, val []byte) LogEvent
-
-	// Network
 	IPAddr(key string, val net.IP) LogEvent
 	MACAddr(key string, val net.HardwareAddr) LogEvent
-
-	// Generic interface
 	Interface(key string, val interface{}) LogEvent
-
-	// Dictionary for nested objects
 	Dict(key string, dict func(LogEvent)) LogEvent
-
-	// Message - must be called last to emit the log
 	Msg(msg string)
 	Msgf(format string, v ...interface{})
 	Send()
@@ -103,7 +72,6 @@ func newLogEvent(e *zerolog.Event) LogEvent {
 	return &logEvent{event: e}
 }
 
-// String fields
 func (e *logEvent) Str(key, val string) LogEvent {
 	if e.event != nil {
 		e.event.Str(key, val)
@@ -125,7 +93,6 @@ func (e *logEvent) Stringer(key string, val interface{ String() string }) LogEve
 	return e
 }
 
-// Numeric fields
 func (e *logEvent) Int(key string, val int) LogEvent {
 	if e.event != nil {
 		e.event.Int(key, val)
@@ -210,7 +177,6 @@ func (e *logEvent) Float64(key string, val float64) LogEvent {
 	return e
 }
 
-// Boolean fields
 func (e *logEvent) Bool(key string, val bool) LogEvent {
 	if e.event != nil {
 		e.event.Bool(key, val)
@@ -225,7 +191,6 @@ func (e *logEvent) Bools(key string, vals []bool) LogEvent {
 	return e
 }
 
-// Time and duration fields
 func (e *logEvent) Time(key string, val time.Time) LogEvent {
 	if e.event != nil {
 		e.event.Time(key, val)
@@ -240,7 +205,6 @@ func (e *logEvent) Dur(key string, val time.Duration) LogEvent {
 	return e
 }
 
-// Error fields
 func (e *logEvent) Err(err error) LogEvent {
 	if e.event != nil {
 		e.event.Err(err)
@@ -255,7 +219,6 @@ func (e *logEvent) AnErr(key string, err error) LogEvent {
 	return e
 }
 
-// Binary and bytes
 func (e *logEvent) Bytes(key string, val []byte) LogEvent {
 	if e.event != nil {
 		e.event.Bytes(key, val)
@@ -270,7 +233,6 @@ func (e *logEvent) Hex(key string, val []byte) LogEvent {
 	return e
 }
 
-// Network
 func (e *logEvent) IPAddr(key string, val net.IP) LogEvent {
 	if e.event != nil {
 		e.event.IPAddr(key, val)
@@ -285,7 +247,6 @@ func (e *logEvent) MACAddr(key string, val net.HardwareAddr) LogEvent {
 	return e
 }
 
-// Generic interface
 func (e *logEvent) Interface(key string, val interface{}) LogEvent {
 	if e.event != nil {
 		e.event.Interface(key, val)
@@ -303,7 +264,6 @@ func (e *logEvent) Dict(key string, dict func(LogEvent)) LogEvent {
 	return e
 }
 
-// Message methods - these emit the log
 func (e *logEvent) Msg(msg string) {
 	if e.event != nil {
 		e.event.Msg(msg)
@@ -383,14 +343,19 @@ func (c *logContext) Interface(key string, val interface{}) LogContext {
 	return c
 }
 
+//	func (c *logContext) Logger() Logger {
+//		logger := c.context.Logger()
+//		newService := &Service{
+//			WorkingDir:    c.service.WorkingDir,
+//			AppConfig:     c.service.AppConfig,
+//			LoggingConfig: c.service.LoggingConfig,
+//			isInitialized: c.service.isInitialized,
+//		}
+//		newService.logger.Store(&logger)
+//		return newService
+//	}
 func (c *logContext) Logger() Logger {
 	logger := c.context.Logger()
-	newService := &Service{
-		WorkingDir:    c.service.WorkingDir,
-		AppConfig:     c.service.AppConfig,
-		LoggingConfig: c.service.LoggingConfig,
-		isInitialized: c.service.isInitialized,
-	}
-	newService.logger.Store(&logger)
-	return newService
+	c.service.logger.Store(&logger)
+	return c.service
 }

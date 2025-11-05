@@ -7,6 +7,7 @@ import (
 	"github.com/Station-Manager/utils"
 	"github.com/rs/zerolog"
 	"go.uber.org/atomic"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ type Service struct {
 	WorkingDir    string          `di.inject:"WorkingDir"`
 	AppConfig     *config.Service `di.inject:"appconfig"`
 	LoggingConfig *types.LoggingConfig
+	fileWriter    *lumberjack.Logger
 	logger        atomic.Pointer[zerolog.Logger]
 	isInitialized atomic.Bool
 	initOnce      sync.Once
@@ -43,7 +45,7 @@ func (s *Service) Initialize() error {
 				err = errors.New(op).Errorf("utils.AbsDirPathForExecutable: %w", pathErr)
 				return
 			}
-			s.WorkingDir = filepath.Join(exeDir, "logs")
+			s.WorkingDir = exeDir
 		}
 
 		loggingCfg, cfgErr := s.AppConfig.LoggingConfig()
@@ -51,11 +53,11 @@ func (s *Service) Initialize() error {
 			err = errors.New(op).Errorf("s.AppConfig.LoggingConfig: %w", cfgErr)
 			return
 		}
-		s.LoggingConfig = &loggingCfg
 
-		if s.LoggingConfig.RelLogFileDir == emptyString {
-			s.LoggingConfig.RelLogFileDir = "logs"
+		if cfgErr = validateConfig(&loggingCfg); cfgErr != nil {
+			err = errors.New(op).Errorf("validateConfig: %w", cfgErr)
 		}
+		s.LoggingConfig = &loggingCfg
 
 		loggingDir := filepath.Join(s.WorkingDir, s.LoggingConfig.RelLogFileDir)
 		exists, existsErr := utils.PathExists(loggingDir)
@@ -65,7 +67,7 @@ func (s *Service) Initialize() error {
 		}
 
 		if !exists {
-			if mdErr := os.MkdirAll(loggingDir, os.ModePerm); mdErr != nil {
+			if mdErr := os.MkdirAll(loggingDir, 0755); mdErr != nil {
 				err = errors.New(op).Errorf("os.MkdirAll: %w", mdErr)
 				return
 			}
@@ -79,17 +81,6 @@ func (s *Service) Initialize() error {
 
 		mw := io.MultiWriter(s.initializeWriters(exeName)...)
 		logger := zerolog.New(mw).With().Logger()
-
-		// If the level is not set, default to info. Also, assume a blank config
-		// so fill in some sensible defaults. See config/defaults.go
-		if s.LoggingConfig.Level == emptyString {
-			s.LoggingConfig.Level = "info"
-			s.LoggingConfig.WithTimestamp = true
-			s.LoggingConfig.SkipFrameCount = 3
-			s.LoggingConfig.LogFileMaxSizeMB = 100
-			s.LoggingConfig.LogFileMaxAgeDays = 30
-			s.LoggingConfig.LogFileMaxBackups = 5
-		}
 
 		level, levelErr := getLevel(s.LoggingConfig.Level)
 		if levelErr != nil {
@@ -115,13 +106,26 @@ func (s *Service) Initialize() error {
 	return err
 }
 
-func (s *Service) Close() {
+func (s *Service) Close() error {
+	const op errors.Op = "logging.Service.Close"
+	if s == nil {
+		return nil
+	}
 	if !s.isInitialized.Load() {
-		return
+		return nil
 	}
 
 	s.isInitialized.Store(false)
 	s.logger.Store(nil)
+
+	// Close the file writer if it exists
+	if s.fileWriter != nil {
+		if err := s.fileWriter.Close(); err != nil {
+			return errors.New(op).Errorf("s.fileWriter.Close: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // InfoWith returns a LogEvent for structured Info-level logging.

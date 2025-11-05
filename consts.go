@@ -8,7 +8,8 @@ const (
 )
 
 const (
-	errMsgNilService       = "Logger service is nil."
-	errMsgWorkingDirNotSet = "Working directory is not set."
-	errMsgAppCfgNotSet     = "Application config is not set."
+	errMsgNilConfig     = "Logging config is nil."
+	errMsgNilService    = "Logger service is nil."
+	errMsgAppCfgNotSet  = "Application config is not set."
+	errMsgConfigInvalid = "Logging configuration is invalid."
 )
