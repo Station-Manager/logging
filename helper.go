@@ -17,6 +17,16 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 	if level == zerolog.NoLevel {
 		return newLogEvent(nil)
 	}
+
+	// Acquire read lock to prevent Close() from running during log creation
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Double-check after acquiring lock
+	if !s.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+
 	logger := s.logger.Load()
 	if logger == nil {
 		return newLogEvent(nil)

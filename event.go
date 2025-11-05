@@ -288,6 +288,66 @@ type logContext struct {
 	service *Service
 }
 
+// contextLogger wraps a zerolog.Logger created from a context
+// It delegates to the parent Service for resource management to avoid
+// race conditions from sharing fileWriter between multiple Service instances
+type contextLogger struct {
+	logger *zerolog.Logger
+	parent *Service
+}
+
+func (cl *contextLogger) InfoWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newLogEvent(cl.logger.Info())
+}
+
+func (cl *contextLogger) WarnWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newLogEvent(cl.logger.Warn())
+}
+
+func (cl *contextLogger) ErrorWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newLogEvent(cl.logger.Error())
+}
+
+func (cl *contextLogger) DebugWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newLogEvent(cl.logger.Debug())
+}
+
+func (cl *contextLogger) FatalWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newLogEvent(cl.logger.Fatal())
+}
+
+func (cl *contextLogger) PanicWith() LogEvent {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+	return newLogEvent(cl.logger.Panic())
+}
+
+func (cl *contextLogger) With() LogContext {
+	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
+		panic("logging.contextLogger.With: logger not initialized")
+	}
+	return &logContext{
+		context: cl.logger.With(),
+		service: cl.parent,
+	}
+}
+
 func (c *logContext) Str(key, val string) LogContext {
 	c.context = c.context.Str(key, val)
 	return c
@@ -345,13 +405,11 @@ func (c *logContext) Interface(key string, val interface{}) LogContext {
 
 func (c *logContext) Logger() Logger {
 	logger := c.context.Logger()
-	newService := &Service{
-		WorkingDir:    c.service.WorkingDir,
-		AppConfig:     c.service.AppConfig,
-		LoggingConfig: c.service.LoggingConfig,
-		fileWriter:    c.service.fileWriter,
+	// Create a wrapper that delegates to the parent service for resource management
+	// This avoids the race condition of sharing fileWriter between multiple Service instances
+	newService := &contextLogger{
+		logger: &logger,
+		parent: c.service,
 	}
-	newService.logger.Store(&logger)
-	newService.isInitialized.Store(true)
 	return newService
 }

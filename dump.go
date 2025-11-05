@@ -16,6 +16,16 @@ func (s *Service) Dump(v interface{}) {
 	if s == nil || !s.isInitialized.Load() {
 		return
 	}
+
+	// Acquire lock to prevent Close() from running
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Double-check after acquiring lock
+	if !s.isInitialized.Load() {
+		return
+	}
+
 	logger := s.logger.Load()
 	if logger == nil {
 		return
