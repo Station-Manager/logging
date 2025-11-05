@@ -12,11 +12,11 @@ import (
 // For structs, it logs all exported fields.
 // For complex types like maps and slices, it logs their elements.
 // For basic types, it logs their values.
-func (l *Service) Dump(v interface{}) {
-	if !l.initialized.Load() {
+func (s *Service) Dump(v interface{}) {
+	if !s.initialized.Load() {
 		return
 	}
-	logger := l.logger.Load()
+	logger := s.logger.Load()
 	if logger == nil {
 		return
 	}
@@ -28,14 +28,14 @@ func (l *Service) Dump(v interface{}) {
 
 	// Use a map to track visited pointers to prevent infinite recursion
 	visited := make(map[uintptr]bool)
-	l.dumpValue(logger, v, "", visited, 0)
+	s.dumpValue(logger, v, "", visited, 0)
 }
 
 // Maximum recursion depth to prevent stack overflow
 const maxDumpDepth = 10
 
 // dumpValue is a recursive helper function for Dump
-func (l *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string, visited map[uintptr]bool, depth int) {
+func (s *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string, visited map[uintptr]bool, depth int) {
 	if depth > maxDumpDepth {
 		logger.Debug().Msgf("%s: <max depth reached>", prefix)
 		return
@@ -94,7 +94,7 @@ func (l *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string
 				fieldPrefix = prefix + "." + field.Name
 			}
 
-			l.dumpValue(logger, fieldVal.Interface(), fieldPrefix, visited, depth+1)
+			s.dumpValue(logger, fieldVal.Interface(), fieldPrefix, visited, depth+1)
 		}
 
 		if prefix != "" {
@@ -113,7 +113,7 @@ func (l *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string
 			keyStr := fmt.Sprintf("%v", k.Interface())
 			mapPrefix := prefix + "[" + keyStr + "]"
 
-			l.dumpValue(logger, v.Interface(), mapPrefix, visited, depth+1)
+			s.dumpValue(logger, v.Interface(), mapPrefix, visited, depth+1)
 		}
 
 		logger.Debug().Msgf("%s: }", prefix)
@@ -126,7 +126,7 @@ func (l *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string
 		maxElements := 10
 		for i := 0; i < val.Len() && i < maxElements; i++ {
 			elemPrefix := fmt.Sprintf("%s[%d]", prefix, i)
-			l.dumpValue(logger, val.Index(i).Interface(), elemPrefix, visited, depth+1)
+			s.dumpValue(logger, val.Index(i).Interface(), elemPrefix, visited, depth+1)
 		}
 
 		if val.Len() > maxElements {

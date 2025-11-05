@@ -1,22 +1,41 @@
 package logging
 
 import (
-	"fmt"
+	"github.com/rs/zerolog"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"io"
+	"os"
 	"path/filepath"
 )
 
-func (l *Service) initializeRollingFileLogger(exeName string) *lumberjack.Logger {
+func (s *Service) initializeRollingFileLogger(exeName string) *lumberjack.Logger {
 	if exeName == emptyString {
 		exeName = "app"
 	}
 
-	path := filepath.Join(l.WorkingDir, l.LoggingConfig.RelLogFileDir, exeName+".log")
-	fmt.Println("Initializing rolling file logger for:", path)
+	path := filepath.Join(s.WorkingDir, s.LoggingConfig.RelLogFileDir, exeName+".log")
+
 	return &lumberjack.Logger{
 		Filename:   path,
-		MaxBackups: l.LoggingConfig.LogFileMaxBackups,
-		MaxAge:     l.LoggingConfig.LogFileMaxAgeDays,
-		MaxSize:    l.LoggingConfig.LogFileMaxSizeMB,
+		MaxBackups: s.LoggingConfig.LogFileMaxBackups,
+		MaxAge:     s.LoggingConfig.LogFileMaxAgeDays,
+		MaxSize:    s.LoggingConfig.LogFileMaxSizeMB,
 	}
+}
+
+func (s *Service) initializeWriters(logfile string) []io.Writer {
+	var writers []io.Writer
+
+	// If both writers are disabled, enable the file writer
+	if !s.LoggingConfig.ConsoleLogging && !s.LoggingConfig.FileLogging {
+		s.LoggingConfig.FileLogging = true
+	}
+	if s.LoggingConfig.FileLogging {
+		writers = append(writers, s.initializeRollingFileLogger(logfile))
+	}
+	if s.LoggingConfig.ConsoleLogging {
+		writers = append(writers, zerolog.ConsoleWriter{Out: os.Stderr})
+	}
+
+	return writers
 }
