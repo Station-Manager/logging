@@ -26,15 +26,19 @@ func (s *Service) initializeRollingFileLogger(exeName string) *lumberjack.Logger
 func (s *Service) initializeWriters(logfile string) []io.Writer {
 	var writers []io.Writer
 
+	// Create a local copy to avoid mutating shared config
+	fileLogging := s.LoggingConfig.FileLogging
+	consoleLogging := s.LoggingConfig.ConsoleLogging
+
 	// If both writers are disabled, enable the file writer
-	if !s.LoggingConfig.ConsoleLogging && !s.LoggingConfig.FileLogging {
-		s.LoggingConfig.FileLogging = true
+	if !consoleLogging && !fileLogging {
+		fileLogging = true
 	}
-	if s.LoggingConfig.FileLogging {
+	if fileLogging {
 		s.fileWriter = s.initializeRollingFileLogger(logfile)
 		writers = append(writers, s.fileWriter)
 	}
-	if s.LoggingConfig.ConsoleLogging {
+	if consoleLogging {
 		writers = append(writers, zerolog.ConsoleWriter{Out: os.Stderr})
 	}
 

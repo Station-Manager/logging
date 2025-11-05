@@ -285,12 +285,18 @@ func TestService_With(t *testing.T) {
 		childLogger.InfoWith().Msg("test from child logger")
 	})
 
-	t.Run("with uninitialized panics", func(t *testing.T) {
+	t.Run("with uninitialized returns noop", func(t *testing.T) {
 		service := &Service{}
 
-		assert.Panics(t, func() {
-			service.With()
-		})
+		ctx := service.With()
+		assert.NotNil(t, ctx)
+
+		// Should return a noop logger that doesn't panic
+		logger := ctx.Str("key", "value").Logger()
+		assert.NotNil(t, logger)
+
+		// Verify logging doesn't panic
+		logger.InfoWith().Msg("should not panic or log")
 	})
 
 	t.Run("context logger methods", func(t *testing.T) {

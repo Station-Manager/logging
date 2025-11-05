@@ -64,12 +64,29 @@ type logEvent struct {
 	event *zerolog.Event
 }
 
+// trackedLogEvent wraps a logEvent and decrements the active operations counter when done
+type trackedLogEvent struct {
+	logEvent
+	service *Service
+}
+
 // newLogEvent creates a new LogEvent wrapper
 func newLogEvent(e *zerolog.Event) LogEvent {
 	if e == nil {
 		return &logEvent{event: nil}
 	}
 	return &logEvent{event: e}
+}
+
+// newTrackedLogEvent creates a new tracked LogEvent that decrements activeOps when finished
+func newTrackedLogEvent(e *zerolog.Event, s *Service) LogEvent {
+	if e == nil || s == nil {
+		return &logEvent{event: nil}
+	}
+	return &trackedLogEvent{
+		logEvent: logEvent{event: e},
+		service:  s,
+	}
 }
 
 func (e *logEvent) Str(key, val string) LogEvent {
@@ -282,6 +299,28 @@ func (e *logEvent) Send() {
 	}
 }
 
+// Override Msg, Msgf, and Send for trackedLogEvent to decrement counter
+func (e *trackedLogEvent) Msg(msg string) {
+	defer e.service.activeOps.Add(-1)
+	if e.event != nil {
+		e.event.Msg(msg)
+	}
+}
+
+func (e *trackedLogEvent) Msgf(format string, v ...interface{}) {
+	defer e.service.activeOps.Add(-1)
+	if e.event != nil {
+		e.event.Msgf(format, v...)
+	}
+}
+
+func (e *trackedLogEvent) Send() {
+	defer e.service.activeOps.Add(-1)
+	if e.event != nil {
+		e.event.Send()
+	}
+}
+
 // logContext implements LogContext by wrapping zerolog.Context
 type logContext struct {
 	context zerolog.Context
@@ -340,8 +379,18 @@ func (cl *contextLogger) PanicWith() LogEvent {
 
 func (cl *contextLogger) With() LogContext {
 	if cl.logger == nil || cl.parent == nil || !cl.parent.isInitialized.Load() {
-		panic("logging.contextLogger.With: logger not initialized")
+		return &noopLogContext{}
 	}
+
+	// Acquire read lock to prevent Close() from running
+	cl.parent.mu.RLock()
+	defer cl.parent.mu.RUnlock()
+
+	// Double-check after acquiring lock
+	if !cl.parent.isInitialized.Load() {
+		return &noopLogContext{}
+	}
+
 	return &logContext{
 		context: cl.logger.With(),
 		service: cl.parent,
@@ -413,3 +462,32 @@ func (c *logContext) Logger() Logger {
 	}
 	return newService
 }
+
+// noopLogContext is a no-op implementation of LogContext
+type noopLogContext struct{}
+
+func (n *noopLogContext) Str(key, val string) LogContext             { return n }
+func (n *noopLogContext) Strs(key string, vals []string) LogContext  { return n }
+func (n *noopLogContext) Int(key string, val int) LogContext         { return n }
+func (n *noopLogContext) Int64(key string, val int64) LogContext     { return n }
+func (n *noopLogContext) Uint(key string, val uint) LogContext       { return n }
+func (n *noopLogContext) Uint64(key string, val uint64) LogContext   { return n }
+func (n *noopLogContext) Float64(key string, val float64) LogContext { return n }
+func (n *noopLogContext) Bool(key string, val bool) LogContext       { return n }
+func (n *noopLogContext) Time(key string, val time.Time) LogContext  { return n }
+func (n *noopLogContext) Err(err error) LogContext                   { return n }
+func (n *noopLogContext) Interface(key string, val interface{}) LogContext {
+	return n
+}
+func (n *noopLogContext) Logger() Logger { return &noopLogger{} }
+
+// noopLogger is a no-op implementation of Logger
+type noopLogger struct{}
+
+func (n *noopLogger) InfoWith() LogEvent  { return newLogEvent(nil) }
+func (n *noopLogger) WarnWith() LogEvent  { return newLogEvent(nil) }
+func (n *noopLogger) ErrorWith() LogEvent { return newLogEvent(nil) }
+func (n *noopLogger) DebugWith() LogEvent { return newLogEvent(nil) }
+func (n *noopLogger) FatalWith() LogEvent { return newLogEvent(nil) }
+func (n *noopLogger) PanicWith() LogEvent { return newLogEvent(nil) }
+func (n *noopLogger) With() LogContext    { return &noopLogContext{} }

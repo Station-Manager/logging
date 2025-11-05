@@ -10,6 +10,9 @@ func getLevel(level string) (zerolog.Level, error) {
 	return l, nil
 }
 
+// logEventBuilder creates a log event for the given level.
+// It uses reference counting to ensure the logger remains valid for the duration
+// of the logging operation, preventing race conditions with Close().
 func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 	if s == nil || !s.isInitialized.Load() {
 		return newLogEvent(nil)
@@ -18,42 +21,56 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 		return newLogEvent(nil)
 	}
 
+	// Increment active operations counter before acquiring lock
+	s.activeOps.Add(1)
+
 	// Acquire read lock to prevent Close() from running during log creation
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
 
 	// Double-check after acquiring lock
 	if !s.isInitialized.Load() {
+		s.mu.RUnlock()
+		s.activeOps.Add(-1)
 		return newLogEvent(nil)
 	}
 
 	logger := s.logger.Load()
 	if logger == nil {
+		s.mu.RUnlock()
+		s.activeOps.Add(-1)
 		return newLogEvent(nil)
 	}
 
 	if logger.GetLevel() > level {
+		s.mu.RUnlock()
+		s.activeOps.Add(-1)
 		return newLogEvent(nil) // Return early if level is not enabled
 	}
 
+	var event *zerolog.Event
 	switch level {
 	case zerolog.DebugLevel:
-		return newLogEvent(logger.Debug())
+		event = logger.Debug()
 	case zerolog.InfoLevel:
-		return newLogEvent(logger.Info())
+		event = logger.Info()
 	case zerolog.WarnLevel:
-		return newLogEvent(logger.Warn())
+		event = logger.Warn()
 	case zerolog.ErrorLevel:
-		return newLogEvent(logger.Error())
+		event = logger.Error()
 	case zerolog.FatalLevel:
-		return newLogEvent(logger.Fatal())
+		event = logger.Fatal()
 	case zerolog.PanicLevel:
-		return newLogEvent(logger.Panic())
-	//case zerolog.Disabled:
-	//	return newLogEvent(nil)
+		event = logger.Panic()
 	case zerolog.TraceLevel:
-		return newLogEvent(logger.Trace())
+		event = logger.Trace()
 	default:
+		s.mu.RUnlock()
+		s.activeOps.Add(-1)
 		return newLogEvent(nil)
 	}
+
+	s.mu.RUnlock()
+
+	// Wrap the event to decrement counter when done
+	return newTrackedLogEvent(event, s)
 }

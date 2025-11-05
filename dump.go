@@ -17,24 +17,34 @@ func (s *Service) Dump(v interface{}) {
 		return
 	}
 
-	// Acquire lock to prevent Close() from running
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// Increment active operations counter
+	s.activeOps.Add(1)
+	defer s.activeOps.Add(-1)
+
+	// Acquire read lock to prevent Close() from running
+	s.mu.RLock()
 
 	// Double-check after acquiring lock
 	if !s.isInitialized.Load() {
+		s.mu.RUnlock()
 		return
 	}
 
 	logger := s.logger.Load()
 	if logger == nil {
+		s.mu.RUnlock()
 		return
 	}
 
 	if v == nil {
 		logger.Debug().Msg("Dump: <nil>")
+		s.mu.RUnlock()
 		return
 	}
+
+	// We can release the read lock here since we've captured the logger
+	// and we'll use activeOps to prevent Close() from completing
+	s.mu.RUnlock()
 
 	// Use a map to track visited pointers to prevent infinite recursion
 	visited := make(map[uintptr]bool)

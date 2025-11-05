@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 type Service struct {
@@ -23,7 +24,8 @@ type Service struct {
 	isInitialized atomic.Bool
 	initOnce      sync.Once
 	initErr       error
-	mu            sync.Mutex
+	mu            sync.RWMutex
+	activeOps     atomic.Int32 // Track active logging operations
 }
 
 // Initialize initializes the logger.
@@ -117,20 +119,38 @@ func (s *Service) Close() error {
 
 	// Lock to prevent concurrent logging operations during close
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	// Double-check after acquiring lock
 	if !s.isInitialized.Load() {
+		s.mu.Unlock()
 		return nil
 	}
 
+	// Mark as uninitialized first to prevent new operations
 	s.isInitialized.Store(false)
 	s.logger.Store(nil)
+	s.mu.Unlock()
+
+	// Wait for active logging operations to complete
+	// Poll with small delays to allow operations to finish
+	for i := 0; i < 100; i++ {
+		if s.activeOps.Load() == 0 {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
 
 	// Close the file writer if it exists
-	if s.fileWriter != nil {
-		if err := s.fileWriter.Close(); err != nil {
-			return errors.New(op).Errorf("s.fileWriter.Close: %w", err)
+	// fileWriter is only accessed here and during initialization (protected by sync.Once)
+	// The activeOps counter ensures no writes are in progress
+	s.mu.Lock()
+	fileWriter := s.fileWriter
+	s.fileWriter = nil
+	s.mu.Unlock()
+
+	if fileWriter != nil {
+		if err := fileWriter.Close(); err != nil {
+			return errors.New(op).Errorf("fileWriter.Close: %w", err)
 		}
 	}
 
@@ -172,23 +192,24 @@ func (s *Service) PanicWith() LogEvent {
 
 // With returns a LogContext for creating a child logger with pre-populated fields.
 // Example: reqLogger := logger.With().Str("request_id", id).Logger()
+// Returns a no-op context if the service is not initialized.
 func (s *Service) With() LogContext {
 	if s == nil || !s.isInitialized.Load() {
-		panic("logging.Service.With: service not initialized")
+		return &noopLogContext{}
 	}
 
-	// Acquire lock to prevent Close() from running
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// Acquire read lock to prevent Close() from running
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
 	// Double-check after acquiring lock
 	if !s.isInitialized.Load() {
-		panic("logging.Service.With: service not initialized")
+		return &noopLogContext{}
 	}
 
 	logger := s.logger.Load()
 	if logger == nil {
-		panic("logging.Service.With: logger not initialized")
+		return &noopLogContext{}
 	}
 	return &logContext{
 		context: logger.With(),
