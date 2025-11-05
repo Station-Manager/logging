@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 )
 
@@ -22,13 +21,6 @@ type Service struct {
 	isInitialized atomic.Bool
 	initOnce      sync.Once
 	mu            sync.Mutex
-}
-
-// sprintPool is a buffer pool for legacy fmt.Sprint operations to reduce allocations
-var sprintPool = sync.Pool{
-	New: func() interface{} {
-		return new(strings.Builder)
-	},
 }
 
 // Initialize initializes the logger.
@@ -159,6 +151,10 @@ func (s *Service) DebugWith() LogEvent {
 // The program will exit after the log is written.
 func (s *Service) FatalWith() LogEvent {
 	return logEventBuilder(s, zerolog.FatalLevel)
+}
+
+func (s *Service) PanicWith() LogEvent {
+	return logEventBuilder(s, zerolog.PanicLevel)
 }
 
 // With returns a LogContext for creating a child logger with pre-populated fields.

@@ -9,6 +9,7 @@ type Logger interface {
 	ErrorWith() LogEvent
 	DebugWith() LogEvent
 	FatalWith() LogEvent
+	PanicWith() LogEvent
 
 	// With for context logger creation
 	// Creates a new logger with pre-populated fields that will be included in all subsequent logs
