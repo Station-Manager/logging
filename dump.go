@@ -96,7 +96,9 @@ func (s *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string
 			}
 			visited[ptr] = true
 			val = val.Elem()
-			// pointer unwrapped; continue handling concrete kind
+		// pointer unwrapped; continue handling concrete kind
+		default:
+			// No-op
 		}
 		break
 	}
