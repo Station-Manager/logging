@@ -45,8 +45,8 @@ func TestService_Initialize(t *testing.T) {
 		cfg := validLoggingConfig()
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		err := service.Initialize()
@@ -75,8 +75,8 @@ func TestService_Initialize(t *testing.T) {
 		invalidCfg.Level = "invalid_level"
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(invalidCfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(invalidCfg),
 		}
 
 		err := service.Initialize()
@@ -89,8 +89,8 @@ func TestService_Initialize(t *testing.T) {
 		cfg := validLoggingConfig()
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		err1 := service.Initialize()
@@ -108,8 +108,8 @@ func TestService_Initialize(t *testing.T) {
 		cfg.ConsoleLogging = false
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		err := service.Initialize()
@@ -124,8 +124,8 @@ func TestService_Initialize(t *testing.T) {
 		cfg.RelLogFileDir = "."
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		err := service.Initialize()
@@ -142,8 +142,8 @@ func TestService_Close(t *testing.T) {
 		cfg := validLoggingConfig()
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		require.NoError(t, service.Initialize())
@@ -171,8 +171,8 @@ func TestService_Close(t *testing.T) {
 		cfg := validLoggingConfig()
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		require.NoError(t, service.Initialize())
@@ -191,8 +191,8 @@ func TestService_Close(t *testing.T) {
 		cfg.ConsoleLogging = false
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		require.NoError(t, service.Initialize())
@@ -207,8 +207,8 @@ func TestService_LoggingMethods(t *testing.T) {
 	cfg := validLoggingConfig()
 
 	service := &Service{
-		WorkingDir: tmpDir,
-		AppConfig:  newTestConfigService(cfg),
+		WorkingDir:    tmpDir,
+		ConfigService: newTestConfigService(cfg),
 	}
 
 	require.NoError(t, service.Initialize())
@@ -271,8 +271,8 @@ func TestService_With(t *testing.T) {
 		cfg := validLoggingConfig()
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		require.NoError(t, service.Initialize())
@@ -306,8 +306,8 @@ func TestService_With(t *testing.T) {
 		cfg := validLoggingConfig()
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		require.NoError(t, service.Initialize())
@@ -334,8 +334,8 @@ func TestService_Dump(t *testing.T) {
 	cfg := validLoggingConfig()
 
 	service := &Service{
-		WorkingDir: tmpDir,
-		AppConfig:  newTestConfigService(cfg),
+		WorkingDir:    tmpDir,
+		ConfigService: newTestConfigService(cfg),
 	}
 
 	require.NoError(t, service.Initialize())
@@ -412,8 +412,8 @@ func TestConcurrentLogging(t *testing.T) {
 	cfg := validLoggingConfig()
 
 	service := &Service{
-		WorkingDir: tmpDir,
-		AppConfig:  newTestConfigService(cfg),
+		WorkingDir:    tmpDir,
+		ConfigService: newTestConfigService(cfg),
 	}
 
 	require.NoError(t, service.Initialize())
@@ -441,8 +441,8 @@ func TestConcurrentLoggingAndClose(t *testing.T) {
 	cfg := validLoggingConfig()
 
 	service := &Service{
-		WorkingDir: tmpDir,
-		AppConfig:  newTestConfigService(cfg),
+		WorkingDir:    tmpDir,
+		ConfigService: newTestConfigService(cfg),
 	}
 
 	require.NoError(t, service.Initialize())
@@ -475,8 +475,8 @@ func TestConcurrentContextLoggers(t *testing.T) {
 	cfg := validLoggingConfig()
 
 	service := &Service{
-		WorkingDir: tmpDir,
-		AppConfig:  newTestConfigService(cfg),
+		WorkingDir:    tmpDir,
+		ConfigService: newTestConfigService(cfg),
 	}
 
 	require.NoError(t, service.Initialize())
@@ -574,8 +574,8 @@ func TestLogContext_AllMethods(t *testing.T) {
 	cfg := validLoggingConfig()
 
 	service := &Service{
-		WorkingDir: tmpDir,
-		AppConfig:  newTestConfigService(cfg),
+		WorkingDir:    tmpDir,
+		ConfigService: newTestConfigService(cfg),
 	}
 
 	require.NoError(t, service.Initialize())
@@ -650,8 +650,8 @@ func TestLogEventBuilder(t *testing.T) {
 		cfg := validLoggingConfig()
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		require.NoError(t, service.Initialize())
@@ -666,8 +666,8 @@ func TestLogEventBuilder(t *testing.T) {
 		cfg := validLoggingConfig()
 
 		service := &Service{
-			WorkingDir: tmpDir,
-			AppConfig:  newTestConfigService(cfg),
+			WorkingDir:    tmpDir,
+			ConfigService: newTestConfigService(cfg),
 		}
 
 		require.NoError(t, service.Initialize())

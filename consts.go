@@ -3,7 +3,7 @@ package logging
 import "github.com/Station-Manager/types"
 
 const (
-	ServiceName = types.LoggerServiceName //"logger"
+	ServiceName = types.LoggingServiceName
 	emptyString = ""
 )
 

@@ -17,7 +17,7 @@ import (
 
 type Service struct {
 	WorkingDir    string          `di.inject:"WorkingDir"`
-	AppConfig     *config.Service `di.inject:"appconfig"`
+	ConfigService *config.Service `di.inject:"configservice"`
 	LoggingConfig *types.LoggingConfig
 	fileWriter    *lumberjack.Logger
 	logger        atomic.Pointer[zerolog.Logger]
@@ -36,12 +36,12 @@ func (s *Service) Initialize() error {
 		return errors.New(op).Msg(errMsgNilService)
 	}
 
-	if s.AppConfig == nil {
+	if s.ConfigService == nil {
 		return errors.New(op).Msg(errMsgAppCfgNotSet)
 	}
 
 	s.initOnce.Do(func() {
-		loggingCfg, cfgErr := s.AppConfig.LoggingConfig()
+		loggingCfg, cfgErr := s.ConfigService.LoggingConfig()
 		if cfgErr != nil {
 			s.initErr = errors.New(op).Errorf("s.AppConfig.LoggingConfig: %w", cfgErr)
 			return

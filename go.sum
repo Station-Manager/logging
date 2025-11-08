@@ -1,9 +1,9 @@
-github.com/Station-Manager/config v0.0.3 h1:G63wbdr28Ge387DViyTf/Ih/jPEY1lyyGj4i0HBij9k=
-github.com/Station-Manager/config v0.0.3/go.mod h1:BEMVg3EF//TjCYpIEJCsO68N3BCTXqmEFoKOppR9N7g=
+github.com/Station-Manager/config v0.0.4 h1:hPdbG7i1VWOFOmPwCpZhsThF5xsBY6tMD0l0Fo4Ay50=
+github.com/Station-Manager/config v0.0.4/go.mod h1:TAzE98vRtbjSCdY1kasHa2CQ95QAyv0xwotDnH6UEM0=
 github.com/Station-Manager/errors v0.0.2 h1:9ZvPB+aayZiL4NY+iNIMGcg4YQv3tKxfZkb1+Bv6jF4=
 github.com/Station-Manager/errors v0.0.2/go.mod h1:yedsGkIKLyDEUhkm7VrjwE2Qq6Jdlq0MpwEjdDhBwh0=
-github.com/Station-Manager/types v0.0.4 h1:A/idu7XCQE3dEfBWk8bcDMczqnFkxgIBNUaT31Jj2kc=
-github.com/Station-Manager/types v0.0.4/go.mod h1:lbrQKhO/l5BDSyaVEaA8YYnPvmeiUEoZP6waaP/c7WE=
+github.com/Station-Manager/types v0.0.5 h1:ZcPgZcvCFMplSZuzBupPyUVxghjlSgdi8qCBwdO+OvM=
+github.com/Station-Manager/types v0.0.5/go.mod h1:lbrQKhO/l5BDSyaVEaA8YYnPvmeiUEoZP6waaP/c7WE=
 github.com/Station-Manager/utils v0.0.1 h1:ySzRNMn8IjtBduD3mQRlAiU+/WtcZTJDg3iTzQEfeoE=
 github.com/Station-Manager/utils v0.0.1/go.mod h1:N7zcMUDz6yJwjyKonDKPRd8PU19GEy7UfJngH6I2nUo=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=

@@ -38,7 +38,7 @@ func TestCloseTimeoutWaitGroup(t *testing.T) {
 	cfg.ConsoleLogging = false
 	cfg.FileLogging = true
 
-	svc := &Service{WorkingDir: tmp, AppConfig: newCfgService(cfg)}
+	svc := &Service{WorkingDir: tmp, ConfigService: newCfgService(cfg)}
 	require.NoError(t, svc.Initialize())
 
 	// Start an event and never call Msg/Send to keep wg non-zero
@@ -60,7 +60,7 @@ func TestWriterOptions(t *testing.T) {
 	cfg.ConsoleNoColor = true
 	cfg.ConsoleTimeFormat = time.RFC3339
 
-	svc := &Service{WorkingDir: tmp, AppConfig: newCfgService(cfg)}
+	svc := &Service{WorkingDir: tmp, ConfigService: newCfgService(cfg)}
 	require.NoError(t, svc.Initialize())
 
 	defer svc.Close()
@@ -80,7 +80,7 @@ func TestRelLogFileDirSafety(t *testing.T) {
 	cfg := cfgWithDefaults()
 	cfg.RelLogFileDir = "/not/relative"
 
-	svc := &Service{WorkingDir: tmp, AppConfig: newCfgService(cfg)}
+	svc := &Service{WorkingDir: tmp, ConfigService: newCfgService(cfg)}
 	err := svc.Initialize()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "RelLogFileDir")
@@ -92,7 +92,7 @@ func TestConcurrentWithDuringClose(t *testing.T) {
 	cfg := cfgWithDefaults()
 	cfg.ShutdownTimeoutMS = 50
 
-	svc := &Service{WorkingDir: tmp, AppConfig: newCfgService(cfg)}
+	svc := &Service{WorkingDir: tmp, ConfigService: newCfgService(cfg)}
 	require.NoError(t, svc.Initialize())
 
 	done := make(chan struct{})
