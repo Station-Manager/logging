@@ -23,3 +23,9 @@ tasks:
   prod:
     cmds:
       - task: production:prod
+
+  clean:
+    desc: "Clean up build artifacts"
+    cmds:
+      - rm -f coverage.*
+      - echo "Build artifacts cleaned up"
