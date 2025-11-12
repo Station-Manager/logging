@@ -16,7 +16,7 @@ import (
 )
 
 type Service struct {
-	WorkingDir    string          `di.inject:"WorkingDir"`
+	WorkingDir    string          `di.inject:"workingdir"`
 	ConfigService *config.Service `di.inject:"configservice"`
 	LoggingConfig *types.LoggingConfig
 	fileWriter    *lumberjack.Logger
