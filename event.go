@@ -281,6 +281,20 @@ func (e *logEvent) Dur(key string, val time.Duration) LogEvent {
 func (e *logEvent) Err(err error) LogEvent {
 	if e.event != nil {
 		e.event.Err(err)
+		if err != nil {
+			chain, ops, root, rootOp := buildErrorChain(err)
+			if len(chain) > 0 {
+				// include array and joined string for readability
+				e.event.Strs("error_chain", chain)
+				e.event.Str("error_root", root)
+				e.event.Str("error_history", joinChain(chain))
+				// include ops if any present
+				e.event.Strs("error_ops", ops)
+				if rootOp != "" {
+					e.event.Str("error_root_op", rootOp)
+				}
+			}
+		}
 	}
 	return e
 }
@@ -288,6 +302,18 @@ func (e *logEvent) Err(err error) LogEvent {
 func (e *logEvent) AnErr(key string, err error) LogEvent {
 	if e.event != nil {
 		e.event.AnErr(key, err)
+		if err != nil {
+			chain, ops, root, rootOp := buildErrorChain(err)
+			if len(chain) > 0 {
+				e.event.Strs(key+"_chain", chain)
+				e.event.Str(key+"_root", root)
+				e.event.Str(key+"_history", joinChain(chain))
+				e.event.Strs(key+"_ops", ops)
+				if rootOp != "" {
+					e.event.Str(key+"_root_op", rootOp)
+				}
+			}
+		}
 	}
 	return e
 }

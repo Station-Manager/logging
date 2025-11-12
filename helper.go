@@ -1,6 +1,12 @@
 package logging
 
-import "github.com/rs/zerolog"
+import (
+	stderrs "errors"
+	"strings"
+
+	smerrors "github.com/Station-Manager/errors"
+	"github.com/rs/zerolog"
+)
 
 func parseLevel(level string) (zerolog.Level, error) {
 	l, err := zerolog.ParseLevel(level)
@@ -8,6 +14,59 @@ func parseLevel(level string) (zerolog.Level, error) {
 		return zerolog.NoLevel, err
 	}
 	return l, nil
+}
+
+// buildErrorChain walks an error's cause chain and returns:
+// - chain: outermost -> innermost error messages
+// - ops: operation identifiers for DetailedError links ("" if not available)
+// - root: the innermost error message
+// - rootOp: the innermost operation identifier if available
+func buildErrorChain(err error) (chain []string, ops []string, root string, rootOp string) {
+	const maxDepth = 50
+	visited := 0
+	seen := map[string]bool{}
+
+	for err != nil && visited < maxDepth {
+		visited++
+
+		if dErr, ok := smerrors.AsDetailedError(err); ok && dErr != nil {
+			msg := dErr.Error()
+			chain = append(chain, msg)
+			op := string(dErr.Op())
+			ops = append(ops, op)
+			// prefer unwrapping via our error type first
+			err = dErr.Cause()
+			continue
+		}
+
+		// Fallback: generic error
+		msg := err.Error()
+		// avoid infinite loops if messages repeat due to unusual cycles
+		if seen[msg] {
+			break
+		}
+		seen[msg] = true
+		chain = append(chain, msg)
+		ops = append(ops, "")
+		// unwrap via stdlib
+		err = stderrs.Unwrap(err)
+	}
+
+	if len(chain) > 0 {
+		root = chain[len(chain)-1]
+	}
+	if len(ops) > 0 {
+		rootOp = ops[len(ops)-1]
+	}
+	return
+}
+
+// joinChain returns a single string for the error chain
+func joinChain(chain []string) string {
+	if len(chain) == 0 {
+		return ""
+	}
+	return strings.Join(chain, " -> ")
 }
 
 // logEventBuilder creates a log event for the given level.
