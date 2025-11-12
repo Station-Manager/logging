@@ -7,7 +7,8 @@ import (
 )
 
 // LogContext provides a fluent interface for building a context logger with pre-populated fields.
-// Fields added through LogContext will be included in all subsequent log messages.
+// Fields added through LogContext will be included in all subsequent log messages created from
+// the resulting child logger. The returned LogContext is immutable; each method returns a new state.
 type LogContext interface {
 	Str(key, val string) LogContext
 	Strs(key string, vals []string) LogContext
@@ -26,6 +27,8 @@ type LogContext interface {
 
 // LogEvent provides a fluent interface for structured logging with type-safe field methods.
 // It wraps zerolog.Event to provide a clean API for adding typed fields to log entries.
+// Calling Msg/Msgf/Send finalizes the event. If the event is a trackedLogEvent, finalizing
+// the event also decrements the internal reference counters used for graceful shutdown.
 type LogEvent interface {
 	Str(key, val string) LogEvent
 	Strs(key string, vals []string) LogEvent
@@ -46,7 +49,10 @@ type LogEvent interface {
 	Bools(key string, vals []bool) LogEvent
 	Time(key string, val time.Time) LogEvent
 	Dur(key string, val time.Duration) LogEvent
+	// Err attaches an error and enriches the event with full chain fields
+	// (error_chain, error_root, error_history, error_ops, error_root_op).
 	Err(err error) LogEvent
+	// AnErr attaches a named error and enriches the event with prefixed chain fields.
 	AnErr(key string, err error) LogEvent
 	Bytes(key string, val []byte) LogEvent
 	Hex(key string, val []byte) LogEvent
@@ -54,23 +60,30 @@ type LogEvent interface {
 	MACAddr(key string, val net.HardwareAddr) LogEvent
 	Interface(key string, val interface{}) LogEvent
 	Dict(key string, dict func(LogEvent)) LogEvent
+	// Msg writes the event with a literal message
 	Msg(msg string)
+	// Msgf writes the event using a format string
 	Msgf(format string, v ...interface{})
+	// Send writes the event without a message
 	Send()
 }
 
 // logEvent implements LogEvent by wrapping zerolog.Event
+// It is safe to call methods on a nil underlying event; in that case the methods
+// become no-ops. This allows returning a LogEvent even when the logger is disabled.
 type logEvent struct {
 	event *zerolog.Event
 }
 
-// trackedLogEvent wraps a logEvent and decrements the active operations counter when done
+// trackedLogEvent wraps a logEvent and decrements the active operations counter when finalized.
+// This ensures Close() can wait for in-flight logging to complete (up to a timeout) without races.
 type trackedLogEvent struct {
 	logEvent
 	service *Service
 }
 
-// newLogEvent creates a new LogEvent wrapper
+// newLogEvent creates a new LogEvent wrapper.
+// If e is nil, the returned LogEvent is a no-op implementation.
 func newLogEvent(e *zerolog.Event) LogEvent {
 	if e == nil {
 		return &logEvent{event: nil}
@@ -79,6 +92,7 @@ func newLogEvent(e *zerolog.Event) LogEvent {
 }
 
 // newTrackedLogEvent creates a new tracked LogEvent that decrements activeOps when finished
+// (on Msg/Msgf/Send calls).
 func newTrackedLogEvent(e *zerolog.Event, s *Service) LogEvent {
 	if e == nil || s == nil {
 		return &logEvent{event: nil}
@@ -90,6 +104,7 @@ func newTrackedLogEvent(e *zerolog.Event, s *Service) LogEvent {
 }
 
 // newTrackedContextLogEvent creates a tracked log event for context loggers
+// that share the same underlying Service lifecycle.
 func newTrackedContextLogEvent(cl *contextLogger, level zerolog.Level) LogEvent {
 	if cl == nil || cl.logger == nil || cl.parent == nil {
 		return newLogEvent(nil)

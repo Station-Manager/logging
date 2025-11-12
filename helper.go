@@ -8,6 +8,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// parseLevel parses a string log level into a zerolog.Level.
+// Returns zerolog.NoLevel and an error if parsing fails.
 func parseLevel(level string) (zerolog.Level, error) {
 	l, err := zerolog.ParseLevel(level)
 	if err != nil {
@@ -17,10 +19,14 @@ func parseLevel(level string) (zerolog.Level, error) {
 }
 
 // buildErrorChain walks an error's cause chain and returns:
-// - chain: outermost -> innermost error messages
-// - ops: operation identifiers for DetailedError links ("" if not available)
-// - root: the innermost error message
-// - rootOp: the innermost operation identifier if available
+//   - chain: outermost -> innermost error messages
+//   - ops: operation identifiers for DetailedError links ("" if not available)
+//   - root: the innermost error message
+//   - rootOp: the innermost operation identifier if available
+//
+// The traversal prefers Station-Manager DetailedError.Cause() and then
+// falls back to stdlib errors.Unwrap. It guards against excessive depth
+// and repeated messages to avoid cycles.
 func buildErrorChain(err error) (chain []string, ops []string, root string, rootOp string) {
 	const maxDepth = 50
 	visited := 0
@@ -61,7 +67,7 @@ func buildErrorChain(err error) (chain []string, ops []string, root string, root
 	return
 }
 
-// joinChain returns a single string for the error chain
+// joinChain returns a single string for the error chain separated by " -> ".
 func joinChain(chain []string) string {
 	if len(chain) == 0 {
 		return ""
@@ -72,6 +78,7 @@ func joinChain(chain []string) string {
 // logEventBuilder creates a log event for the given level.
 // It uses reference counting to ensure the logger remains valid for the duration
 // of the logging operation, preventing race conditions with Close().
+// If the level is disabled on the logger, it returns a no-op LogEvent.
 func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 	if s == nil || !s.isInitialized.Load() {
 		return newLogEvent(nil)

@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 )
 
+// initializeRollingFileLogger configures a lumberjack logger for file rotation
+// using the configured size/age/backup limits. The filename is derived from
+// the executable name plus .log, written under RelLogFileDir relative to WorkingDir.
 func (s *Service) initializeRollingFileLogger(exeName string) *lumberjack.Logger {
 	if exeName == emptyString {
 		exeName = "app"
@@ -24,6 +27,9 @@ func (s *Service) initializeRollingFileLogger(exeName string) *lumberjack.Logger
 	}
 }
 
+// initializeWriters creates the set of io.Writer targets for the logger based on configuration.
+// If both console and file logging are disabled, file logging is enabled by default for safety.
+// The method also stores the file writer on the Service for later Close().
 func (s *Service) initializeWriters(logfile string) []io.Writer {
 	var writers []io.Writer
 

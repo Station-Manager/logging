@@ -9,9 +9,10 @@ import (
 
 // Dump logs the contents of the provided value at Debug level.
 // It handles various types including structs, maps, slices, and basic types.
-// For structs, it logs all exported fields.
-// For complex types like maps and slices, it logs their elements.
-// For basic types, it logs their values.
+// For structs, it logs all exported fields. For complex types like maps and slices,
+// it logs their elements. For basic types, it logs their values. The traversal
+// depth is limited to avoid stack overflows and it tracks visited addresses to
+// avoid cycles.
 func (s *Service) Dump(v interface{}) {
 	if s == nil || !s.isInitialized.Load() {
 		return
@@ -58,7 +59,8 @@ func (s *Service) Dump(v interface{}) {
 // Maximum recursion depth to prevent stack overflow
 const maxDumpDepth = 10
 
-// dumpValue is a recursive helper function for Dump
+// dumpValue is a recursive helper function for Dump. It unwraps interfaces and pointers safely
+// (with cycle detection) and logs the structure using Debug-level entries.
 func (s *Service) dumpValue(logger *zerolog.Logger, v interface{}, prefix string, visited map[uintptr]bool, depth int) {
 	if depth > maxDumpDepth {
 		logger.Debug().Msgf("%s: <max depth reached>", prefix)

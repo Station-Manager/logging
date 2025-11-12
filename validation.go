@@ -13,6 +13,9 @@ import (
 var validate *validator.Validate
 var once sync.Once
 
+// validateConfig validates the LoggingConfig structure using struct tags
+// and additional semantic checks such as a valid log level, reasonable
+// caller skip frame bounds, and RelLogFileDir safety (no traversal, relative path only).
 func validateConfig(cfg *types.LoggingConfig) error {
 	const op errors.Op = "logging.validateConfig"
 	if cfg == nil {

@@ -3,6 +3,7 @@ package logging
 import "github.com/Station-Manager/types"
 
 const (
+	// ServiceName is the DI/service locator name for the logging service.
 	ServiceName = types.LoggingServiceName
 	emptyString = ""
 )

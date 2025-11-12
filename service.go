@@ -15,6 +15,17 @@ import (
 	"time"
 )
 
+// Service is the primary logging facility for the application.
+//
+// It wraps rs/zerolog with:
+//   - one-time initialization and graceful shutdown
+//   - concurrency-safe event builders
+//   - file rotation via lumberjack
+//   - optional console writer with configurable color/time format
+//   - error history enrichment for Err/AnErr calls
+//
+// A Service must be initialized via Initialize() before use and closed with Close().
+// It is safe for concurrent use by multiple goroutines.
 type Service struct {
 	WorkingDir    string          `di.inject:"workingdir"`
 	ConfigService *config.Service `di.inject:"configservice"`
@@ -29,7 +40,10 @@ type Service struct {
 	wg            sync.WaitGroup
 }
 
-// Initialize initializes the logger.
+// Initialize prepares the Service for use: it validates configuration, ensures
+// the log directory exists, sets up file/console writers, sets the log level,
+// and builds the zerolog logger with any requested timestamp or caller info.
+// Initialize is safe to call multiple times; subsequent calls are no-ops.
 func (s *Service) Initialize() error {
 	const op errors.Op = "logging.Service.Initialize"
 	if s == nil {
@@ -109,6 +123,9 @@ func (s *Service) Initialize() error {
 	return s.initErr
 }
 
+// Close stops accepting new log operations, waits for in-flight logging to
+// finish up to a configured timeout, optionally warns on timeout, and closes
+// any open file writer. It is safe to call multiple times.
 func (s *Service) Close() error {
 	const op errors.Op = "logging.Service.Close"
 	if s == nil {
