@@ -27,17 +27,18 @@ import (
 // A Service must be initialized via Initialize() before use and closed with Close().
 // It is safe for concurrent use by multiple goroutines.
 type Service struct {
-	WorkingDir    string          `di.inject:"workingdir"`
-	ConfigService *config.Service `di.inject:"configservice"`
-	LoggingConfig *types.LoggingConfig
-	fileWriter    *lumberjack.Logger
-	logger        atomic.Pointer[zerolog.Logger]
-	isInitialized atomic.Bool
-	initOnce      sync.Once
-	initErr       error
-	mu            sync.RWMutex
-	activeOps     atomic.Int32 // Track active logging operations
-	wg            sync.WaitGroup
+	WorkingDir        string          `di.inject:"workingdir"`
+	ConfigService     *config.Service `di.inject:"configservice"`
+	LoggingConfig     *types.LoggingConfig
+	fileWriter        *lumberjack.Logger
+	logger            atomic.Pointer[zerolog.Logger]
+	isInitialized     atomic.Bool
+	initOnce          sync.Once
+	initErr           error
+	mu                sync.RWMutex
+	activeOps         atomic.Int32 // Track active logging operations
+	wg                sync.WaitGroup
+	activeOpLocations map[string]int // Debug: Track where active operations were created
 }
 
 // Initialize prepares the Service for use: it validates configuration, ensures
@@ -184,10 +185,24 @@ func (s *Service) Close() error {
 	if timedOut && warnOnTimeout && logger != nil {
 		activeOps := s.activeOps.Load()
 
-		logger.Warn().
+		// Capture location info for debugging
+		s.mu.Lock()
+		locations := make(map[string]int)
+		for k, v := range s.activeOpLocations {
+			locations[k] = v
+		}
+		s.mu.Unlock()
+
+		event := logger.Warn().
 			Int32("active_operations", activeOps).
-			Int("timeout_ms", timeoutMS).
-			Msg("Logger shutdown timeout exceeded, forcing close with active operations")
+			Int("timeout_ms", timeoutMS)
+
+		// Add location info if available
+		if len(locations) > 0 {
+			event = event.Interface("operation_locations", locations)
+		}
+
+		event.Msg("Logger shutdown timeout exceeded, forcing close with active operations")
 
 		// Force-drain the WaitGroup to prevent indefinite blocking
 		// This handles orphaned log operations that never called Msg()/Send()
@@ -212,6 +227,15 @@ func (s *Service) Close() error {
 	}
 
 	return nil
+}
+
+// ActiveOperations returns the current number of active logging operations.
+// This is primarily used by shutdown logic to wait for in-flight operations to complete.
+func (s *Service) ActiveOperations() int32 {
+	if s == nil {
+		return 0
+	}
+	return s.activeOps.Load()
 }
 
 // TraceWith returns a LogEvent for structured Trace-level logging.

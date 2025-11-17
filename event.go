@@ -79,7 +79,8 @@ type logEvent struct {
 // This ensures Close() can wait for in-flight logging to complete (up to a timeout) without races.
 type trackedLogEvent struct {
 	logEvent
-	service *Service
+	service  *Service
+	location string // Debug: Track where this operation was created
 }
 
 // newLogEvent creates a new LogEvent wrapper.
@@ -93,19 +94,31 @@ func newLogEvent(e *zerolog.Event) LogEvent {
 
 // newTrackedLogEvent creates a new tracked LogEvent that decrements activeOps when finished
 // (on Msg/Msgf/Send calls).
-func newTrackedLogEvent(e *zerolog.Event, s *Service) LogEvent {
+func newTrackedLogEvent(e *zerolog.Event, s *Service, location string) LogEvent {
 	if e == nil || s == nil {
 		// If event is nil, we need to decrement the counter that was already incremented
 		// by the caller (logEventBuilder or newTrackedContextLogEvent)
 		if s != nil {
 			s.activeOps.Add(-1)
 			s.wg.Done()
+			// Also decrement location counter if tracking is enabled
+			if location != "" {
+				s.mu.Lock()
+				if s.activeOpLocations != nil {
+					s.activeOpLocations[location]--
+					if s.activeOpLocations[location] <= 0 {
+						delete(s.activeOpLocations, location)
+					}
+				}
+				s.mu.Unlock()
+			}
 		}
 		return &logEvent{event: nil}
 	}
 	return &trackedLogEvent{
 		logEvent: logEvent{event: e},
 		service:  s,
+		location: location,
 	}
 }
 
@@ -163,7 +176,7 @@ func newTrackedContextLogEvent(cl *contextLogger, level zerolog.Level) LogEvent 
 
 	cl.parent.mu.RUnlock()
 
-	return newTrackedLogEvent(event, cl.parent)
+	return newTrackedLogEvent(event, cl.parent, "")
 }
 
 func (e *logEvent) Str(key, val string) LogEvent {
@@ -407,6 +420,17 @@ func (e *trackedLogEvent) Msg(msg string) {
 	defer func() {
 		e.service.activeOps.Add(-1)
 		e.service.wg.Done()
+		// Also decrement location counter if tracking is enabled
+		if e.location != "" {
+			e.service.mu.Lock()
+			if e.service.activeOpLocations != nil {
+				e.service.activeOpLocations[e.location]--
+				if e.service.activeOpLocations[e.location] <= 0 {
+					delete(e.service.activeOpLocations, e.location)
+				}
+			}
+			e.service.mu.Unlock()
+		}
 	}()
 	if e.event != nil {
 		e.event.Msg(msg)
@@ -417,6 +441,17 @@ func (e *trackedLogEvent) Msgf(format string, v ...interface{}) {
 	defer func() {
 		e.service.activeOps.Add(-1)
 		e.service.wg.Done()
+		// Also decrement location counter if tracking is enabled
+		if e.location != "" {
+			e.service.mu.Lock()
+			if e.service.activeOpLocations != nil {
+				e.service.activeOpLocations[e.location]--
+				if e.service.activeOpLocations[e.location] <= 0 {
+					delete(e.service.activeOpLocations, e.location)
+				}
+			}
+			e.service.mu.Unlock()
+		}
 	}()
 	if e.event != nil {
 		e.event.Msgf(format, v...)
@@ -427,6 +462,17 @@ func (e *trackedLogEvent) Send() {
 	defer func() {
 		e.service.activeOps.Add(-1)
 		e.service.wg.Done()
+		// Also decrement location counter if tracking is enabled
+		if e.location != "" {
+			e.service.mu.Lock()
+			if e.service.activeOpLocations != nil {
+				e.service.activeOpLocations[e.location]--
+				if e.service.activeOpLocations[e.location] <= 0 {
+					delete(e.service.activeOpLocations, e.location)
+				}
+			}
+			e.service.mu.Unlock()
+		}
 	}()
 	if e.event != nil {
 		e.event.Send()

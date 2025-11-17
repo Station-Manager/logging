@@ -2,6 +2,8 @@ package logging
 
 import (
 	stderrs "errors"
+	"fmt"
+	"runtime"
 	"strings"
 
 	smerrors "github.com/Station-Manager/errors"
@@ -87,18 +89,49 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 		return newLogEvent(nil)
 	}
 
+	// Check if initialized BEFORE incrementing counters to avoid leaks during shutdown
+	if !s.isInitialized.Load() {
+		return newLogEvent(nil)
+	}
+
 	// Increment active operations counter before acquiring lock
 	s.activeOps.Add(1)
 	s.wg.Add(1)
 
+	// Debug: Track where this operation was created
+	var location string
+	if s.LoggingConfig.ShutdownTimeoutWarning {
+		_, file, line, ok := runtime.Caller(2)
+		if ok {
+			location = fmt.Sprintf("%s:%d", file, line)
+			s.mu.Lock()
+			if s.activeOpLocations == nil {
+				s.activeOpLocations = make(map[string]int)
+			}
+			s.activeOpLocations[location]++
+			s.mu.Unlock()
+		}
+	}
+
 	// Acquire read lock to prevent Close() from running during log creation
 	s.mu.RLock()
 
-	// Double-check after acquiring lock
+	// Double-check after acquiring lock (TOCTOU protection)
 	if !s.isInitialized.Load() {
 		s.mu.RUnlock()
 		s.activeOps.Add(-1)
 		s.wg.Done()
+		// Also decrement location counter if tracking is enabled
+		if location != "" {
+			s.mu.Lock()
+			if s.activeOpLocations != nil {
+				s.activeOpLocations[location]--
+				if s.activeOpLocations[location] <= 0 {
+					delete(s.activeOpLocations, location)
+				}
+			}
+			s.mu.Unlock()
+		}
 		return newLogEvent(nil)
 	}
 
@@ -107,6 +140,17 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 		s.mu.RUnlock()
 		s.activeOps.Add(-1)
 		s.wg.Done()
+		// Also decrement location counter if tracking is enabled
+		if location != "" {
+			s.mu.Lock()
+			if s.activeOpLocations != nil {
+				s.activeOpLocations[location]--
+				if s.activeOpLocations[location] <= 0 {
+					delete(s.activeOpLocations, location)
+				}
+			}
+			s.mu.Unlock()
+		}
 		return newLogEvent(nil)
 	}
 
@@ -114,6 +158,17 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 		s.mu.RUnlock()
 		s.activeOps.Add(-1)
 		s.wg.Done()
+		// Also decrement location counter if tracking is enabled
+		if location != "" {
+			s.mu.Lock()
+			if s.activeOpLocations != nil {
+				s.activeOpLocations[location]--
+				if s.activeOpLocations[location] <= 0 {
+					delete(s.activeOpLocations, location)
+				}
+			}
+			s.mu.Unlock()
+		}
 		return newLogEvent(nil) // Return early if level is not enabled
 	}
 
@@ -143,5 +198,5 @@ func logEventBuilder(s *Service, level zerolog.Level) LogEvent {
 	s.mu.RUnlock()
 
 	// Wrap the event to decrement counter when done
-	return newTrackedLogEvent(event, s)
+	return newTrackedLogEvent(event, s, location)
 }
