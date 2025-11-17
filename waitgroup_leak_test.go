@@ -48,7 +48,7 @@ func TestWaitGroupLeakWithNilEvent(t *testing.T) {
 
 	// Now call newTrackedLogEvent with nil event
 	// The fix should decrement the counter
-	event := newTrackedLogEvent(nil, service)
+	event := newTrackedLogEvent(nil, service, "test")
 	require.NotNil(t, event)
 
 	// The event should be a no-op, but more importantly,
@@ -285,7 +285,7 @@ func TestWaitGroupWithConcurrentLoggingAndShutdown(t *testing.T) {
 // TestNewTrackedLogEventWithNilService verifies defensive handling
 func TestNewTrackedLogEventWithNilService(t *testing.T) {
 	// This should not panic and should return a no-op event
-	event := newTrackedLogEvent(nil, nil)
+	event := newTrackedLogEvent(nil, nil, "test")
 	require.NotNil(t, event)
 
 	// Calling Msg should be safe (no-op)
@@ -328,7 +328,7 @@ func TestNewTrackedLogEventWithNilEventOnly(t *testing.T) {
 	assert.Equal(t, int32(1), initialOps)
 
 	// Call newTrackedLogEvent with nil event
-	event := newTrackedLogEvent(nil, service)
+	event := newTrackedLogEvent(nil, service, "test")
 	require.NotNil(t, event)
 
 	// The counter should have been decremented back to 0
