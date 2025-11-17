@@ -183,10 +183,18 @@ func (s *Service) Close() error {
 	// Log warning if shutdown timeout was exceeded and warning is enabled
 	if timedOut && warnOnTimeout && logger != nil {
 		activeOps := s.activeOps.Load()
+
 		logger.Warn().
 			Int32("active_operations", activeOps).
 			Int("timeout_ms", timeoutMS).
 			Msg("Logger shutdown timeout exceeded, forcing close with active operations")
+
+		// Force-drain the WaitGroup to prevent indefinite blocking
+		// This handles orphaned log operations that never called Msg()/Send()
+		for i := int32(0); i < activeOps; i++ {
+			s.activeOps.Add(-1)
+			s.wg.Done()
+		}
 	}
 
 	// Close the file writer if it exists

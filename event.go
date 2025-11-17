@@ -95,6 +95,12 @@ func newLogEvent(e *zerolog.Event) LogEvent {
 // (on Msg/Msgf/Send calls).
 func newTrackedLogEvent(e *zerolog.Event, s *Service) LogEvent {
 	if e == nil || s == nil {
+		// If event is nil, we need to decrement the counter that was already incremented
+		// by the caller (logEventBuilder or newTrackedContextLogEvent)
+		if s != nil {
+			s.activeOps.Add(-1)
+			s.wg.Done()
+		}
 		return &logEvent{event: nil}
 	}
 	return &trackedLogEvent{
