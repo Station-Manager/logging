@@ -101,7 +101,6 @@ func newTrackedLogEvent(e *zerolog.Event, s *Service, location string) LogEvent 
 		if s != nil {
 			s.activeOps.Add(-1)
 			s.wg.Done()
-			// Also decrement location counter if tracking is enabled
 			if location != "" {
 				s.mu.Lock()
 				if s.activeOpLocations != nil {
@@ -129,27 +128,21 @@ func newTrackedContextLogEvent(cl *contextLogger, level zerolog.Level) LogEvent 
 		return newLogEvent(nil)
 	}
 
-	// Increment active operations counter
-	cl.parent.activeOps.Add(1)
-	cl.parent.wg.Add(1)
-
 	// Acquire read lock to prevent Close() from running
 	cl.parent.mu.RLock()
+	defer cl.parent.mu.RUnlock()
 
-	// Double-check after acquiring lock
 	if !cl.parent.isInitialized.Load() {
-		cl.parent.mu.RUnlock()
-		cl.parent.activeOps.Add(-1)
-		cl.parent.wg.Done()
 		return newLogEvent(nil)
 	}
 
 	if cl.logger.GetLevel() > level {
-		cl.parent.mu.RUnlock()
-		cl.parent.activeOps.Add(-1)
-		cl.parent.wg.Done()
 		return newLogEvent(nil)
 	}
+
+	// Increment active operations counter ONLY if a log event will be created
+	cl.parent.activeOps.Add(1)
+	cl.parent.wg.Add(1)
 
 	var event *zerolog.Event
 	switch level {
@@ -168,13 +161,11 @@ func newTrackedContextLogEvent(cl *contextLogger, level zerolog.Level) LogEvent 
 	case zerolog.TraceLevel:
 		event = cl.logger.Trace()
 	default:
-		cl.parent.mu.RUnlock()
+		// Should not happen, but decrement counter if it does
 		cl.parent.activeOps.Add(-1)
 		cl.parent.wg.Done()
 		return newLogEvent(nil)
 	}
-
-	cl.parent.mu.RUnlock()
 
 	return newTrackedLogEvent(event, cl.parent, "")
 }

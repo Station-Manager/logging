@@ -5,7 +5,7 @@ go 1.25
 require (
 	github.com/Station-Manager/config v0.0.8
 	github.com/Station-Manager/errors v0.0.4
-	github.com/Station-Manager/types v0.0.19
+	github.com/Station-Manager/types v0.0.20
 	github.com/Station-Manager/utils v0.0.2
 	github.com/go-playground/validator/v10 v10.28.0
 	github.com/rs/zerolog v1.34.0

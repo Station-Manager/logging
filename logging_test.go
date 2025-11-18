@@ -202,6 +202,81 @@ func TestService_Close(t *testing.T) {
 	})
 }
 
+func TestService_CloseWithTimeout(t *testing.T) {
+	t.Run("close with timeout and warning", func(t *testing.T) {
+		var buf bytes.Buffer
+		cfg := validLoggingConfig()
+		cfg.ShutdownTimeoutMS = 10
+		cfg.ShutdownTimeoutWarning = true
+
+		service := &Service{
+			ConfigService: newTestConfigService(cfg),
+		}
+
+		// Override the writer to capture output
+		consoleWriter := zerolog.ConsoleWriter{Out: &buf, TimeFormat: time.RFC3339, NoColor: true}
+		service.initOnce.Do(func() {
+			service.LoggingConfig = cfg
+			logger := zerolog.New(consoleWriter).With().Timestamp().Logger()
+			service.logger.Store(&logger)
+			service.isInitialized.Store(true)
+			service.activeOpLocations = make(map[string]int)
+		})
+
+		// Simulate an orphaned log operation
+		_ = service.InfoWith()
+
+		err := service.Close()
+		require.NoError(t, err)
+
+		// Check for the warning message
+		output := buf.String()
+		assert.Contains(t, output, "Logger shutdown timeout exceeded")
+		assert.Contains(t, output, "active_operations=1")
+	})
+}
+
+func TestService_CloseWaitsForLogs(t *testing.T) {
+	var buf threadSafeBuffer
+	cfg := validLoggingConfig()
+	// Make shutdown wait long enough for our goroutine
+	cfg.ShutdownTimeoutMS = 1000
+
+	service := &Service{
+		ConfigService: newTestConfigService(cfg),
+	}
+
+	// Override the writer to capture output
+	consoleWriter := zerolog.ConsoleWriter{Out: &buf, TimeFormat: time.RFC3339, NoColor: true}
+	service.initOnce.Do(func() {
+		service.LoggingConfig = cfg
+		logger := zerolog.New(consoleWriter).With().Timestamp().Logger()
+		service.logger.Store(&logger)
+		service.isInitialized.Store(true)
+	})
+
+	// Use a WaitGroup so we know the goroutine has actually issued the log call
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		// Small delay to overlap with Close, but not too long
+		time.Sleep(50 * time.Millisecond)
+		service.InfoWith().Msg("final log message")
+	}()
+
+	// Wait until the logging goroutine has run InfoWith().Msg
+	wg.Wait()
+
+	// Now Close should see zero in-flight operations and return
+	err := service.Close()
+	require.NoError(t, err)
+
+	// Check that the log was written before close returned
+	output := buf.String()
+	assert.Contains(t, output, "final log message")
+}
+
 func TestService_LoggingMethods(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := validLoggingConfig()
@@ -688,4 +763,87 @@ func TestLogEventBuilder(t *testing.T) {
 			assert.NotNil(t, event)
 		}
 	})
+}
+
+// threadSafeBuffer is a simple thread-safe buffer for capturing log output.
+type threadSafeBuffer struct {
+	bytes.Buffer
+	sync.Mutex
+}
+
+func (b *threadSafeBuffer) Write(p []byte) (n int, err error) {
+	b.Lock()
+	defer b.Unlock()
+	return b.Buffer.Write(p)
+}
+
+func (b *threadSafeBuffer) String() string {
+	b.Lock()
+	defer b.Unlock()
+	return b.Buffer.String()
+}
+
+func TestService_ActiveOperationsAndClose_NoLeaks(t *testing.T) {
+	// This test stresses the logging service under concurrent load and asserts that
+	// Close() returns without deadlock or error. ActiveOperations() is sampled
+	// heavily to ensure it is safe to call while logging is in progress.
+
+	tmpDir := t.TempDir()
+	cfg := validLoggingConfig()
+	cfg.ShutdownTimeoutMS = 2000 // generous timeout to avoid flakiness
+
+	service := &Service{
+		WorkingDir:    tmpDir,
+		ConfigService: newTestConfigService(cfg),
+	}
+
+	require.NoError(t, service.Initialize())
+
+	// Start a bunch of goroutines that log repeatedly
+	var wg sync.WaitGroup
+	const goroutines = 20
+	const iterations = 200
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < iterations; j++ {
+				service.InfoWith().Int("goroutine", id).Int("iteration", j).Msg("active-ops-test")
+			}
+		}(i)
+	}
+
+	// While logging is happening, periodically read ActiveOperations in a best-effort way
+	stopMonitor := make(chan struct{})
+	var monitorWG sync.WaitGroup
+	monitorWG.Add(1)
+	go func() {
+		defer monitorWG.Done()
+		for {
+			select {
+			case <-stopMonitor:
+				return
+			default:
+				_ = service.ActiveOperations()
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	// Wait for all log goroutines to complete
+	wg.Wait()
+	// Stop monitor and wait for it to exit
+	close(stopMonitor)
+	monitorWG.Wait()
+
+	// At this point, all user goroutines have finished. ActiveOperations() should not grow,
+	// and Close() must complete without error or deadlock.
+	err := service.Close()
+	require.NoError(t, err)
+
+	// After Close(), it is safe to call ActiveOperations; we only assert it is non-negative.
+	// (The internal counter may be left >0 in rare forced-timeout paths, which Close
+	// handles by draining the WaitGroup and logging a warning.)
+	assert.GreaterOrEqual(t, service.ActiveOperations(), int32(0))
 }

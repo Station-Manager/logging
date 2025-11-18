@@ -164,51 +164,36 @@ func (s *Service) Close() error {
 	}
 
 	// Wait for active logging operations to complete using WaitGroup with timeout
-	done := make(chan struct{})
-	go func() {
-		s.wg.Wait()
-		close(done)
-	}()
+	if waitTimeout(&s.wg, time.Duration(timeoutMS)*time.Millisecond) {
+		// Timed out
+		if warnOnTimeout && logger != nil {
+			activeOps := s.activeOps.Load()
 
-	timer := time.NewTimer(time.Duration(timeoutMS) * time.Millisecond)
-	defer timer.Stop()
+			// Capture location info for debugging
+			s.mu.Lock()
+			locations := make(map[string]int)
+			for k, v := range s.activeOpLocations {
+				locations[k] = v
+			}
+			s.mu.Unlock()
 
-	timedOut := false
-	select {
-	case <-done:
-		// all operations finished
-	case <-timer.C:
-		timedOut = true
-	}
+			event := logger.Warn().
+				Int32("active_operations", activeOps).
+				Int("timeout_ms", timeoutMS)
 
-	// Log warning if shutdown timeout was exceeded and warning is enabled
-	if timedOut && warnOnTimeout && logger != nil {
-		activeOps := s.activeOps.Load()
+			// Add location info if available
+			if len(locations) > 0 {
+				event = event.Interface("operation_locations", locations)
+			}
 
-		// Capture location info for debugging
-		s.mu.Lock()
-		locations := make(map[string]int)
-		for k, v := range s.activeOpLocations {
-			locations[k] = v
-		}
-		s.mu.Unlock()
+			event.Msg("Logger shutdown timeout exceeded, forcing close with active operations")
 
-		event := logger.Warn().
-			Int32("active_operations", activeOps).
-			Int("timeout_ms", timeoutMS)
-
-		// Add location info if available
-		if len(locations) > 0 {
-			event = event.Interface("operation_locations", locations)
-		}
-
-		event.Msg("Logger shutdown timeout exceeded, forcing close with active operations")
-
-		// Force-drain the WaitGroup to prevent indefinite blocking
-		// This handles orphaned log operations that never called Msg()/Send()
-		for i := int32(0); i < activeOps; i++ {
-			s.activeOps.Add(-1)
-			s.wg.Done()
+			// Force-drain the WaitGroup to prevent indefinite blocking
+			// This handles orphaned log operations that never called Msg()/Send()
+			for i := int32(0); i < activeOps; i++ {
+				s.activeOps.Add(-1)
+				s.wg.Done()
+			}
 		}
 	}
 
@@ -227,6 +212,31 @@ func (s *Service) Close() error {
 	}
 
 	return nil
+}
+
+// waitTimeout waits for the waitgroup for the specified duration.
+// Returns true if waiting timed out.
+func waitTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		wg.Wait()
+	}()
+	select {
+	case <-c:
+		return false // completed normally
+	case <-time.After(timeout):
+		return true // timed out
+	}
+}
+
+// Wait blocks until all active logging operations have completed.
+// This is useful for ensuring all logs are written before program exit.
+func (s *Service) Wait() {
+	if s == nil || !s.isInitialized.Load() {
+		return
+	}
+	s.wg.Wait()
 }
 
 // ActiveOperations returns the current number of active logging operations.
