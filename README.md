@@ -1,4 +1,4 @@
-# Station-Manager logging module
+# Station Manager: logging package
 
 A thin, concurrency-safe wrapper around rs/zerolog with a structured-first API, safe lifecycle (Initialize/Close), file rotation via lumberjack, and rich error history enrichment.
 
