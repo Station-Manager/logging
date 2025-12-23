@@ -3,11 +3,11 @@ module github.com/Station-Manager/logging
 go 1.25
 
 require (
-	github.com/Station-Manager/config v0.0.28
+	github.com/Station-Manager/config v0.0.31
 	github.com/Station-Manager/errors v0.0.11
-	github.com/Station-Manager/types v0.0.59
+	github.com/Station-Manager/types v0.0.66
 	github.com/Station-Manager/utils v0.0.4
-	github.com/go-playground/validator/v10 v10.29.0
+	github.com/go-playground/validator/v10 v10.30.0
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/atomic v1.11.0
@@ -15,7 +15,7 @@ require (
 )
 
 require (
-	github.com/Station-Manager/enums v0.0.2 // indirect
+	github.com/Station-Manager/enums v0.0.5 // indirect
 	github.com/creack/goselect v0.1.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
